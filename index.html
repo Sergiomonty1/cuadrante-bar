@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Cuadrante · Bar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --bg: #0a0908; --bg-1: #131210; --bg-2: #1c1a17; --bg-3: #2a2724;
+    --border: #2e2a26; --border-2: #3d3833;
+    --text: #f4f1ec; --text-2: #b8b1a6; --text-3: #7c756b; --text-4: #4d4843;
+    --accent: #ff6b35; --accent-2: #ffb347; --accent-soft: rgba(255,107,53,0.12); --accent-glow: rgba(255,107,53,0.35);
+    --green: #5ee188; --green-soft: rgba(94,225,136,0.12);
+    --red: #ff4d6d; --red-soft: rgba(255,77,109,0.12);
+    --blue: #61a8ff; --blue-soft: rgba(97,168,255,0.12);
+    --purple: #b794ff; --purple-soft: rgba(183,148,255,0.12);
+    --yellow: #ffd23f; --yellow-soft: rgba(255,210,63,0.12);
+    --display: 'Instrument Serif', Georgia, serif;
+    --sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px;
+    --shadow-glow: 0 0 0 1px rgba(255,255,255,0.04), 0 24px 48px rgba(0,0,0,0.4);
+    --t-fast: 0.15s cubic-bezier(0.4,0,0.2,1); --t-base: 0.25s cubic-bezier(0.4,0,0.2,1); --t-slow: 0.4s cubic-bezier(0.4,0,0.2,1);
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+  body { min-height: 100vh; min-height: 100dvh; padding: 16px 16px max(16px, env(safe-area-inset-bottom)) 16px;
+    background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255,107,53,0.10), transparent), radial-gradient(ellipse 60% 50% at 100% 100%, rgba(97,168,255,0.04), transparent);
+    background-attachment: fixed; overflow-x: hidden; }
+  .container { max-width: 1180px; margin: 0 auto; position: relative; }
+
+  header { padding: 24px 0 28px; position: relative; }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .header-line { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; transform:scale(1);} 50% { opacity:.5; transform:scale(.85);} }
+  .eyebrow { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--text-3); }
+  h1 { font-family: var(--display); font-weight: 400; font-size: clamp(40px, 9vw, 76px); letter-spacing: -0.025em; line-height: 0.95; margin-bottom: 12px; }
+  h1 em { font-style: italic; color: var(--accent); }
+  .subtitle { color: var(--text-2); font-size: 15px; max-width: 540px; }
+  .subtitle b { color: var(--text); font-weight: 500; }
+
+  .card { background: linear-gradient(180deg, var(--bg-1) 0%, rgba(19,18,16,0.6) 100%); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 22px; margin-bottom: 16px; position: relative; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  .card-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .card-title { font-family: var(--display); font-size: 26px; letter-spacing: -0.015em; display: flex; align-items: center; gap: 10px; }
+  .card-title .ic { font-size: 20px; opacity: 0.85; }
+  h3 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-3); margin-bottom: 12px; }
+
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; background: var(--bg-2); border: 1px solid var(--border); padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 500; transition: all var(--t-fast); }
+  .pill:hover { border-color: var(--border-2); }
+  .pill button { background: none; border: none; color: var(--text-3); cursor: pointer; padding: 0; font-size: 14px; line-height: 1; display: flex; transition: color var(--t-fast); }
+  .pill button:hover { color: var(--red); }
+
+  input[type="text"], input[type="password"], select { background: var(--bg-2); border: 1px solid var(--border); color: var(--text); padding: 11px 14px; border-radius: var(--r-sm); font-family: inherit; font-size: 14px; transition: all var(--t-fast); width: 100%; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); background: var(--bg-3); box-shadow: 0 0 0 3px var(--accent-soft); }
+  input::placeholder { color: var(--text-4); }
+  select { cursor: pointer; appearance: none; -webkit-appearance: none; padding-right: 36px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23b8b1a6' stroke-width='1.5' d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; }
+
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 11px 18px; border-radius: var(--r-sm); font-family: inherit; font-size: 14px; font-weight: 500; border: 1px solid transparent; cursor: pointer; transition: all var(--t-fast); white-space: nowrap; user-select: none; }
+  .btn-primary { background: var(--accent); color: #1a0a02; box-shadow: 0 4px 16px rgba(255,107,53,0.25), inset 0 1px 0 rgba(255,255,255,0.2); }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-2); transform: translateY(-1px); }
+  .btn-primary:active:not(:disabled) { transform: translateY(0); }
+  .btn-ghost { background: var(--bg-2); color: var(--text); border-color: var(--border); }
+  .btn-ghost:hover:not(:disabled) { background: var(--bg-3); border-color: var(--border-2); }
+  .btn-green { background: var(--green); color: #052b14; box-shadow: 0 4px 16px rgba(94,225,136,0.2); }
+  .btn-green:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn-whatsapp { background: #25D366; color: #052b14; font-weight: 600; }
+  .btn-whatsapp:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn-icon { padding: 9px 12px; min-width: 38px; justify-content: center; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+  .btn-link { background: none; border: none; color: var(--text-3); cursor: pointer; font-family: inherit; font-size: 12px; text-decoration: underline; padding: 4px 8px; }
+  .btn-link:hover { color: var(--text); }
+  .btn-link.danger { color: var(--red); }
+
+  .semana-block { margin-bottom: 24px; }
+  .semana-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; padding: 18px 22px; background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-1) 100%); border: 1px solid var(--border-2); border-radius: var(--r-md); }
+  .semana-name { font-family: var(--display); font-size: 28px; font-weight: 400; letter-spacing: -0.015em; background: transparent; border: none; border-bottom: 1px dashed transparent; color: var(--text); padding: 2px 4px; width: 100%; max-width: 360px; }
+  .semana-name:hover:not(:disabled) { border-bottom-color: var(--border-2); }
+  .semana-name:focus { border-bottom-color: var(--accent); outline: none; }
+
+  .dia-card { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; margin-bottom: 12px; transition: border-color var(--t-base); }
+  .dia-card.confirmado { border-color: rgba(94,225,136,0.4); }
+  .dia-card.confirmado .dia-header { background: linear-gradient(90deg, var(--green-soft) 0%, transparent 50%); }
+  .dia-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 14px 18px; background: var(--bg-2); border-bottom: 1px solid var(--border); }
+  .dia-titulo { display: flex; align-items: baseline; gap: 8px; font-family: var(--display); font-size: 20px; letter-spacing: -0.01em; }
+  .dia-tag { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-3); background: var(--bg-3); padding: 3px 8px; border-radius: 4px; }
+  .dia-body { padding: 16px 18px; }
+
+  .field-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-3); margin-bottom: 10px; }
+  .field-block { margin-bottom: 16px; }
+
+  .worker-pill { padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 500; border: 1px solid var(--border); background: var(--bg-2); color: var(--text-2); cursor: pointer; transition: all var(--t-fast); user-select: none; }
+  .worker-pill:hover:not(:disabled) { border-color: var(--border-2); color: var(--text); }
+  .worker-pill.active { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
+  .worker-pill:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .barra-note { background: var(--accent-soft); border: 1px solid var(--accent-glow); border-left: 3px solid var(--accent); padding: 10px 14px; margin-top: 10px; border-radius: 6px; font-size: 12px; color: var(--accent-2); line-height: 1.5; }
+  .barra-note b { color: var(--accent); }
+
+  .asignaciones { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); animation: slideDown var(--t-slow); }
+  @keyframes slideDown { from { opacity:0; transform:translateY(-8px);} to { opacity:1; transform:translateY(0);} }
+  .bloque-tareas { margin-bottom: 14px; }
+  .bloque-tareas h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-3); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .tarea-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); margin-bottom: 5px; font-size: 14px; transition: all var(--t-fast); }
+  .tarea-row:hover { border-color: var(--border-2); }
+  .tarea-row.barra-row { background: linear-gradient(90deg, var(--accent-soft), transparent); border-color: var(--accent-glow); }
+  .tarea-row.prioritaria { background: linear-gradient(90deg, var(--blue-soft), transparent); border-color: rgba(97,168,255,0.3); }
+  .tarea-row.semanal { background: linear-gradient(90deg, var(--purple-soft), transparent); border-color: rgba(183,148,255,0.3); }
+  .tarea-row.hecha { opacity: 0.55; }
+  .tarea-row.hecha .tarea-nombre { text-decoration: line-through; color: var(--text-3); }
+  .tarea-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .tarea-check { width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--border-2); background: var(--bg-3); cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all var(--t-fast); color: transparent; font-size: 13px; }
+  .tarea-check:hover { border-color: var(--green); }
+  .tarea-check.checked { background: var(--green); border-color: var(--green); color: #052b14; }
+  .tarea-nombre { color: var(--text); min-width: 0; }
+  .tarea-derecha { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .tarea-persona { font-weight: 600; color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all var(--t-fast); border: 1px dashed transparent; font-size: 13px; }
+  .tarea-persona.editable:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-2); }
+  .add-person-btn { background: var(--bg-3); border: 1px dashed var(--border-2); color: var(--text-3); border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: all var(--t-fast); flex-shrink: 0; }
+  .add-person-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .estrella { color: var(--blue); margin-right: 4px; font-size: 11px; }
+  .badge-sem { color: var(--purple); margin-right: 4px; font-size: 11px; }
+
+  .hint { font-size: 11px; color: var(--text-3); font-style: italic; margin: 10px 0; display: flex; align-items: center; gap: 6px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+  .tareas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 720px) { .tareas-grid { grid-template-columns: 1fr; } }
+  .tarea-editor-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); margin-bottom: 5px; font-size: 13px; transition: all var(--t-fast); }
+  .tarea-editor-row:hover { border-color: var(--border-2); }
+  .tarea-editor-row .flags { display: flex; gap: 2px; flex-wrap: wrap; }
+  .flag-badge { font-size: 12px; width: 26px; height: 26px; border-radius: 5px; cursor: pointer; user-select: none; border: 1px solid var(--border); background: var(--bg-3); color: var(--text-4); display: flex; align-items: center; justify-content: center; transition: all var(--t-fast); }
+  .flag-badge.on-prio { background: var(--blue-soft); color: var(--blue); border-color: rgba(97,168,255,0.4); }
+  .flag-badge.on-barra { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-glow); }
+  .flag-badge.on-doble { background: var(--green-soft); color: var(--green); border-color: rgba(94,225,136,0.4); }
+  .flag-badge.on-oblig { background: var(--red-soft); color: var(--red); border-color: rgba(255,77,109,0.4); }
+  .flag-badge.on-sem { background: var(--purple-soft); color: var(--purple); border-color: rgba(183,148,255,0.4); }
+  .arrow-btn { background: var(--bg-3); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; padding: 0; width: 22px; height: 22px; color: var(--text-2); font-size: 10px; transition: all var(--t-fast); display: flex; align-items: center; justify-content: center; }
+  .arrow-btn:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-glow); }
+  .arrow-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+  .arrow-stack { display: flex; flex-direction: column; gap: 2px; }
+  .del-btn { background: none; border: none; color: var(--text-4); cursor: pointer; font-size: 14px; padding: 4px 6px; border-radius: 4px; transition: all var(--t-fast); }
+  .del-btn:hover { color: var(--red); background: var(--red-soft); }
+  .tarea-input { padding: 6px 10px; background: var(--bg-3); border: 1px solid transparent; border-radius: 5px; font-size: 13px; font-family: inherit; flex: 1; color: var(--text); min-width: 60px; }
+  .tarea-input:hover { border-color: var(--border); }
+  .tarea-input:focus { border-color: var(--accent); background: var(--bg-2); outline: none; }
+  .add-tarea-row { display: flex; gap: 6px; margin-top: 10px; }
+
+  .table-wrap { overflow-x: auto; margin: 0 -22px; padding: 0 22px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 10px 8px; text-align: center; border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); font-weight: 500; padding-bottom: 12px; border-bottom: 2px solid var(--border-2); }
+  th:first-child, td:first-child { text-align: left; font-weight: 500; padding-left: 4px; }
+  td:first-child { color: var(--text); }
+  .total-col { background: var(--bg-2); font-weight: 700; color: var(--accent-2); }
+  .zero { color: var(--text-4); }
+  tbody tr:hover td { background: var(--bg-2); }
+  tbody tr:hover .total-col { background: var(--accent-soft); }
+
+  .empty { background: var(--bg-1); border: 1px dashed var(--border-2); border-radius: var(--r-md); padding: 56px 20px; text-align: center; color: var(--text-3); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+  .empty-text { font-family: var(--display); font-size: 22px; color: var(--text-2); margin-bottom: 4px; }
+  .empty-sub { font-size: 13px; color: var(--text-4); }
+
+  .badge { display: none; position: fixed; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%) translateY(-100px); background: var(--bg-2); border: 1px solid var(--border-2); color: var(--text); padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 500; z-index: 200; box-shadow: 0 12px 32px rgba(0,0,0,0.4); transition: transform var(--t-base); }
+  .badge.show { display: inline-flex; transform: translateX(-50%) translateY(0); align-items: center; gap: 6px; }
+  .badge.success { border-color: rgba(94,225,136,0.4); color: var(--green); }
+  .badge.whatsapp { border-color: rgba(37,211,102,0.4); color: #25D366; }
+
+  .confirmed-tag { display: inline-flex; align-items: center; gap: 5px; background: var(--green-soft); color: var(--green); padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid rgba(94,225,136,0.3); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 999; justify-content: center; align-items: center; padding: 20px; animation: fadeIn 0.2s; }
+  .modal-overlay.show { display: flex; }
+  @keyframes fadeIn { from { opacity:0;} to { opacity:1;} }
+  .modal-card { background: var(--bg-1); border: 1px solid var(--border-2); border-radius: var(--r-lg); padding: 24px; max-width: 360px; width: 100%; box-shadow: var(--shadow-glow); animation: scaleIn 0.2s cubic-bezier(0.4,0,0.2,1); }
+  @keyframes scaleIn { from { transform:scale(0.92); opacity:0;} to { transform:scale(1); opacity:1;} }
+  .modal-card h3 { font-family: var(--display); font-size: 22px; text-transform: none; letter-spacing: -0.01em; color: var(--text); margin-bottom: 16px; font-weight: 400; }
+  .modal-options { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; padding-right: 4px; }
+  .modal-option { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-2); cursor: pointer; text-align: left; font-family: inherit; font-size: 15px; color: var(--text); transition: all var(--t-fast); }
+  .modal-option:hover { background: var(--bg-3); border-color: var(--border-2); }
+  .modal-option.current { background: var(--accent); color: #1a0a02; border-color: var(--accent); font-weight: 600; }
+  .modal-option.quitar { color: var(--red); }
+  .modal-close { margin-top: 16px; width: 100%; padding: 11px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer; font-family: inherit; color: var(--text-2); }
+  .modal-close:hover { background: var(--bg-3); color: var(--text); }
+
+  .admin-banner { background: linear-gradient(90deg, var(--accent-soft), transparent); border: 1px solid var(--accent-glow); padding: 10px 16px; border-radius: var(--r-md); margin-bottom: 16px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--accent-2); }
+  .admin-banner b { color: var(--accent); }
+
+  .foot { text-align: center; padding: 32px 0 20px; border-top: 1px solid var(--border); margin-top: 32px; }
+  .status { font-family: var(--mono); font-size: 11px; color: var(--text-3); margin-bottom: 12px; display: inline-flex; align-items: center; gap: 6px; }
+  .status.connected { color: var(--green); }
+  .status.error { color: var(--red); }
+  .status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--text-4); }
+  .status.connected::before { background: var(--green); box-shadow: 0 0 8px rgba(94,225,136,0.6); }
+  .status.error::before { background: var(--red); }
+  .foot-links { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+  .card { animation: fadeUp 0.5s ease-out backwards; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(12px);} to { opacity:1; transform:translateY(0);} }
+
+  .dia-add-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 14px; background: var(--bg-1); border: 1px dashed var(--border-2); border-radius: var(--r-md); margin-bottom: 12px; }
+  .dia-add-row select { width: auto; flex: 1; min-width: 120px; }
+
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    .card { padding: 18px 16px; }
+    .dia-header { padding: 12px 14px; }
+    .dia-body { padding: 14px; }
+    .table-wrap { margin: 0 -16px; padding: 0 16px; }
+    .btn { padding: 12px 16px; }
+    .worker-pill { padding: 10px 16px; font-size: 14px; }
+    h1 { font-size: clamp(36px, 11vw, 60px); }
+    .card-title { font-size: 22px; }
+    .semana-name { font-size: 24px; }
+    .tarea-row { padding: 10px 12px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="modal-overlay" id="modalPersona">
+  <div class="modal-card">
+    <h3 id="modalTitle">Cambiar persona</h3>
+    <div class="modal-options" id="modalOptions"></div>
+    <button class="modal-close" onclick="cerrarModal()">Cancelar</button>
+  </div>
+</div>
+
+<div class="badge success" id="savedBadge">✓ Sincronizado</div>
+<div class="badge whatsapp" id="copiedBadge">📋 Copiado</div>
+
+<div class="container" id="mainContainer" style="display: none;">
+  <header>
+    <div class="header-top">
+      <div>
+        <div class="header-line"><div class="pulse-dot"></div><span class="eyebrow">Bar · Sabores</span></div>
+        <h1>Cuadrante <em>de limpieza</em></h1>
+        <p class="subtitle">Reparto automático y <b>equilibrado</b> entre el equipo</p>
+      </div>
+      <button class="btn btn-ghost" id="adminToggleBtn" onclick="toggleAdmin()" style="margin-top: 8px;">🔑 Administrador</button>
+    </div>
+  </header>
+
+  <div id="adminBanner" class="admin-banner" style="display: none;">
+    <span>✦ <b>Modo administrador</b> activo · puedes editarlo todo</span>
+    <button class="btn-link" onclick="salirAdmin()">Salir de admin</button>
+  </div>
+
+  <section class="card" id="plantillaCard">
+    <div class="card-h"><div class="card-title"><span class="ic">⬢</span>Plantilla</div></div>
+    <div class="pills" id="personasList"></div>
+    <div style="display: flex; gap: 8px;" id="personasInputBox">
+      <input type="text" id="nuevaPersona" placeholder="Añadir persona..." />
+      <button class="btn btn-ghost" onclick="añadirPersona()">+</button>
+    </div>
+  </section>
+
+  <section class="card" id="tareasCard">
+    <div class="card-h"><div class="card-title"><span class="ic">✦</span>Tareas</div></div>
+    <p class="hint" style="margin: 0 0 16px;">Por prioridad (arriba = primero). <span style="color:var(--red)">✓</span> obligatoria · <span style="color:var(--blue)">⭐</span> prioritaria · <span style="color:var(--accent)">🍺</span> de barra · <span style="color:var(--green)">👥</span> doble · <span style="color:var(--purple)">📅</span> semanal (1 vez/semana)</p>
+    <div class="tareas-grid">
+      <div>
+        <h3>Antes del servicio</h3>
+        <div id="tareasAntesList"></div>
+        <div class="add-tarea-row" id="addAntesBox">
+          <input type="text" class="tarea-input" id="nuevaTareaAntes" placeholder="Nueva tarea..." />
+          <button class="btn btn-ghost btn-icon" onclick="añadirTarea('antes')">+</button>
+        </div>
+      </div>
+      <div>
+        <h3>Después del servicio</h3>
+        <div id="tareasDespuesList"></div>
+        <div class="add-tarea-row" id="addDespuesBox">
+          <input type="text" class="tarea-input" id="nuevaTareaDespues" placeholder="Nueva tarea..." />
+          <button class="btn btn-ghost btn-icon" onclick="añadirTarea('despues')">+</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card-h" style="margin-bottom: 16px;">
+      <div class="card-title"><span class="ic">◆</span>Semanas</div>
+      <button class="btn btn-primary" id="btnNuevaSemana" onclick="añadirSemana()">+ Nueva semana</button>
+    </div>
+    <div id="semanasContainer"></div>
+  </section>
+
+  <section class="card" style="margin-top: 24px;">
+    <div class="card-h">
+      <div class="card-title"><span class="ic">▤</span>Histórico</div>
+      <button class="btn-link danger" id="btnResetHist" onclick="resetearHistorico()">Resetear</button>
+    </div>
+    <div class="table-wrap"><table id="historicoTable"></table></div>
+    <p class="hint" style="margin-top: 12px;">El algoritmo prioriza a quien menos veces ha hecho cada tarea. Si falta gente, el de barra también ayuda.</p>
+  </section>
+
+  <div class="foot">
+    <div class="status" id="connStatus">Conectando...</div>
+    <div class="foot-links">
+      <button class="btn-link danger" id="btnResetTodo" onclick="resetearTodo()">Resetear todo</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+  import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  const firebaseConfig = {
+    apiKey: "AIzaSyAFH202bdANJWTaat8HYE7JsF5zT-LGyv8",
+    authDomain: "cuadrante-bar.firebaseapp.com",
+    projectId: "cuadrante-bar",
+    storageBucket: "cuadrante-bar.firebasestorage.app",
+    messagingSenderId: "1027334561245",
+    appId: "1:1027334561245:web:ae4e37a6a896b2fd676a34"
+  };
+  const PASSWORD_EDITAR = "sabores1111";
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  window._fb = { auth, db, signInAnonymously, onAuthStateChanged, doc, onSnapshot, setDoc };
+  window._passwords = { editar: PASSWORD_EDITAR };
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
+<script>
+const PERSONAS_INICIALES = ['Sergio', 'Mireya', 'Alexandru', 'Miguel', 'Triana', 'Alberto'];
+const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const TURNOS_TIPO = ['Mediodía', 'Noche'];
+
+// flags: obligatoria, prioritaria, deBarra, doble, semanal
+const TAREAS_DEFAULT = [
+  { id: 'reservas', nombre: 'Preparar reservas', bloque: 'antes', obligatoria: true, prioritaria: true, deBarra: false, doble: false, semanal: false },
+  { id: 'barrer_barra', nombre: 'Barrer y preparar salón 1', bloque: 'antes', obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false },
+  { id: 'barrer_fuera', nombre: 'Barrer y preparar terraza', bloque: 'antes', obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false },
+  { id: 'cortar_pan', nombre: 'Cortar pan', bloque: 'antes', obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false },
+  { id: 'banos_antes', nombre: 'Cuartos de baño', bloque: 'antes', obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false },
+  { id: 'cafe_aceros_antes', nombre: 'Máquina café + Aceros', bloque: 'antes', obligatoria: true, prioritaria: false, deBarra: true, doble: false, semanal: false },
+  // Tareas semanales (1 vez por semana)
+  { id: 'lamparas_salon', nombre: 'Lámparas salón', bloque: 'antes', obligatoria: false, prioritaria: false, deBarra: false, doble: false, semanal: true },
+  { id: 'almacen', nombre: 'Almacén', bloque: 'antes', obligatoria: false, prioritaria: false, deBarra: false, doble: false, semanal: true },
+  { id: 'sillas', nombre: 'Sillas', bloque: 'antes', obligatoria: false, prioritaria: false, deBarra: false, doble: false, semanal: true },
+  { id: 'retirar_camaras', nombre: 'Retirar cámaras', bloque: 'antes', obligatoria: false, prioritaria: false, deBarra: false, doble: false, semanal: true },
+  { id: 'limpiar_muebles', nombre: 'Limpiar muebles', bloque: 'antes', obligatoria: false, prioritaria: false, deBarra: false, doble: false, semanal: true },
+  { id: 'vidrio', nombre: 'Vidrio', bloque: 'antes', obligatoria: false, prioritaria: false, deBarra: false, doble: false, semanal: true },
+  { id: 'barrotes_porche', nombre: 'Barrotes porche', bloque: 'antes', obligatoria: false, prioritaria: false, deBarra: false, doble: false, semanal: true },
+  { id: 'cristales_espejo', nombre: 'Cristales y espejo', bloque: 'antes', obligatoria: false, prioritaria: false, deBarra: false, doble: false, semanal: true },
+  { id: 'aspas_ventiladores', nombre: 'Aspas ventiladores', bloque: 'antes', obligatoria: false, prioritaria: false, deBarra: false, doble: false, semanal: true },
+  // Después del servicio
+  { id: 'terraza_completa', nombre: 'Barrer y recoger terraza', bloque: 'despues', obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false },
+  { id: 'salon1', nombre: 'Salón 1 + Mueble servicio', bloque: 'despues', obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false },
+  { id: 'salon2', nombre: 'Salón 2 + Repasar cubiertos', bloque: 'despues', obligatoria: true, prioritaria: false, deBarra: false, doble: true, semanal: false },
+  { id: 'almacen_basuras_banos', nombre: 'Basuras + Cuartos de baño', bloque: 'despues', obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false },
+  { id: 'aceros_cafe_despues', nombre: 'Aceros + Máquina café', bloque: 'despues', obligatoria: true, prioritaria: false, deBarra: true, doble: false, semanal: false }
+];
+
+const TAREA_RECARGAR_CAMARAS = { id: 'recargar_camaras', nombre: 'Recargar cámaras', deBarra: true };
+const PREFERENCIA_RESERVAS = ['Miguel', 'Sergio', 'Mireya', 'Alexandru'];
+
+let personas = [...PERSONAS_INICIALES];
+let tareas = JSON.parse(JSON.stringify(TAREAS_DEFAULT));
+let semanas = [];
+let historico = {};
+let modoEditor = false;
+let docRef = null;
+let primerSync = true;
+
+function tareasAntes() { return tareas.filter(t => t.bloque === 'antes'); }
+function tareasDespues() { return tareas.filter(t => t.bloque === 'despues'); }
+function tareasSemanales() { return tareas.filter(t => t.semanal); }
+function tareaPorId(id) { return tareas.find(t => t.id === id); }
+
+// =============== ADMIN ===============
+function toggleAdmin() {
+  if (modoEditor) { salirAdmin(); return; }
+  const c = prompt('Clave de administrador:');
+  if (c === window._passwords.editar) {
+    modoEditor = true;
+    sessionStorage.setItem('cuadrante_admin', '1');
+    aplicarModo();
+    render();
+  } else if (c !== null) {
+    alert('Clave incorrecta');
+  }
+}
+function salirAdmin() {
+  modoEditor = false;
+  sessionStorage.removeItem('cuadrante_admin');
+  aplicarModo();
+  render();
+}
+function aplicarModo() {
+  document.getElementById('adminBanner').style.display = modoEditor ? 'flex' : 'none';
+  document.getElementById('adminToggleBtn').textContent = modoEditor ? '🔓 Salir admin' : '🔑 Administrador';
+  document.getElementById('personasInputBox').style.display = modoEditor ? 'flex' : 'none';
+  document.getElementById('addAntesBox').style.display = modoEditor ? 'flex' : 'none';
+  document.getElementById('addDespuesBox').style.display = modoEditor ? 'flex' : 'none';
+  document.getElementById('btnNuevaSemana').style.display = modoEditor ? 'inline-flex' : 'none';
+  document.getElementById('btnResetHist').style.display = modoEditor ? 'inline-block' : 'none';
+  document.getElementById('btnResetTodo').style.display = modoEditor ? 'inline-block' : 'none';
+}
+
+// =============== FIREBASE ===============
+window.addEventListener('firebase-ready', () => {
+  const { auth, signInAnonymously, onAuthStateChanged, doc, db } = window._fb;
+  if (sessionStorage.getItem('cuadrante_admin') === '1') modoEditor = true;
+  document.getElementById('mainContainer').style.display = 'block';
+  aplicarModo();
+  document.getElementById('connStatus').textContent = 'Conectando...';
+  signInAnonymously(auth).catch(err => {
+    document.getElementById('connStatus').textContent = 'Error de conexión';
+    document.getElementById('connStatus').className = 'status error';
+  });
+  onAuthStateChanged(auth, (user) => {
+    if (user) { docRef = doc(db, 'cuadrante', 'datos'); escucharCambios(); }
+  });
+});
+
+function escucharCambios() {
+  const { onSnapshot } = window._fb;
+  onSnapshot(docRef, (snap) => {
+    if (snap.exists()) {
+      const data = snap.data();
+      personas = data.personas || [...PERSONAS_INICIALES];
+      semanas = data.semanas || [];
+      historico = data.historico || {};
+      if (data.tareas && Array.isArray(data.tareas) && data.tareas.length > 0) {
+        tareas = data.tareas;
+        // Asegurar que las tareas nuevas por defecto que no existan se añadan (ej: semanales nuevas)
+        TAREAS_DEFAULT.forEach(def => {
+          if (!tareas.find(t => t.id === def.id)) {
+            tareas.push(JSON.parse(JSON.stringify(def)));
+          }
+        });
+      }
+    }
+    document.getElementById('connStatus').textContent = 'Conectado · tiempo real';
+    document.getElementById('connStatus').className = 'status connected';
+    if (primerSync) { primerSync = false; render(); }
+    else { render(); mostrarBadge('savedBadge'); }
+  }, (err) => {
+    document.getElementById('connStatus').textContent = 'Error: ' + err.message;
+    document.getElementById('connStatus').className = 'status error';
+  });
+}
+
+async function guardar() {
+  if (!docRef || !modoEditor) return;
+  const { setDoc } = window._fb;
+  try { await setDoc(docRef, { personas, semanas, historico, tareas, updatedAt: Date.now() }); }
+  catch (err) { alert('Error al guardar: ' + err.message); }
+}
+// Guardar permitido también para checks desde modo normal
+async function guardarCheck() {
+  if (!docRef) return;
+  const { setDoc } = window._fb;
+  try { await setDoc(docRef, { personas, semanas, historico, tareas, updatedAt: Date.now() }); }
+  catch (err) { console.error(err); }
+}
+
+function mostrarBadge(id) {
+  const b = document.getElementById(id);
+  b.classList.add('show');
+  clearTimeout(window['_t_' + id]);
+  window['_t_' + id] = setTimeout(() => b.classList.remove('show'), 1800);
+}
+
+function contar(persona, tareaId, hist = historico) { return (hist[persona] && hist[persona][tareaId]) || 0; }
+function contarTotal(persona, hist = historico) {
+  if (!hist[persona]) return 0;
+  return Object.entries(hist[persona]).filter(([k]) => k !== 'barra_count').reduce((a, [, v]) => a + v, 0);
+}
+function contarBarra(persona, hist = historico) { return (hist[persona] && hist[persona]['barra_count']) || 0; }
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// =============== EDITOR DE TAREAS ===============
+function añadirTarea(bloque) {
+  if (!modoEditor) return;
+  const inp = document.getElementById(bloque === 'antes' ? 'nuevaTareaAntes' : 'nuevaTareaDespues');
+  const nombre = inp.value.trim();
+  if (!nombre) return;
+  let baseId = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  if (!baseId) baseId = 'tarea_' + Date.now();
+  let id = baseId, n = 1;
+  while (tareas.find(t => t.id === id)) { id = baseId + '_' + (n++); }
+  tareas.push({ id, nombre, bloque, obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false });
+  inp.value = '';
+  guardar();
+}
+function eliminarTarea(id) {
+  if (!modoEditor) return;
+  if (!confirm('¿Eliminar esta tarea?')) return;
+  tareas = tareas.filter(t => t.id !== id);
+  guardar();
+}
+function moverTarea(id, dir) {
+  if (!modoEditor) return;
+  const t = tareaPorId(id); if (!t) return;
+  const delBloque = tareas.filter(x => x.bloque === t.bloque);
+  const idx = delBloque.findIndex(x => x.id === id);
+  if (dir === 'up' && idx === 0) return;
+  if (dir === 'down' && idx === delBloque.length - 1) return;
+  const ig = tareas.findIndex(x => x.id === id);
+  const otroId = delBloque[dir === 'up' ? idx - 1 : idx + 1].id;
+  const og = tareas.findIndex(x => x.id === otroId);
+  [tareas[ig], tareas[og]] = [tareas[og], tareas[ig]];
+  guardar();
+}
+function toggleFlag(id, flag) {
+  if (!modoEditor) return;
+  const t = tareaPorId(id); if (!t) return;
+  t[flag] = !t[flag];
+  // semanal y obligatoria/diaria son excluyentes conceptualmente; si marca semanal, quita obligatoria
+  if (flag === 'semanal' && t.semanal) t.obligatoria = false;
+  guardar();
+}
+function renombrarTarea(id, nuevo) {
+  if (!modoEditor) return;
+  const t = tareaPorId(id); if (!t || !nuevo.trim()) return;
+  t.nombre = nuevo.trim();
+  guardar();
+}
+
+// =============== SEMANAS Y DÍAS ===============
+function añadirSemana() {
+  if (!modoEditor) return;
+  const num = semanas.length + 1;
+  semanas.unshift({ id: 's' + Date.now(), nombre: `Semana ${num}`, dias: [] });
+  guardar();
+}
+function eliminarSemana(si) {
+  if (!modoEditor) return;
+  if (!confirm('¿Eliminar esta semana entera?')) return;
+  // desconfirmar días para revertir histórico
+  semanas[si].dias.forEach((d, di) => { if (d.confirmado) desconfirmarDia(si, di); });
+  semanas.splice(si, 1);
+  guardar();
+}
+function actualizarNombreSemana(si, nombre) { if (!modoEditor) return; semanas[si].nombre = nombre; guardar(); }
+
+function añadirDia(si) {
+  if (!modoEditor) return;
+  const diaSel = document.getElementById('diaSelect_' + si).value;
+  const turnoSel = document.getElementById('turnoSelect_' + si).value;
+  semanas[si].dias.push({
+    id: 'd' + Date.now(), dia: diaSel, turno: turnoSel,
+    trabajadores: [], personaBarra: null, asignaciones: null, confirmado: false
+  });
+  guardar();
+}
+function eliminarDia(si, di) {
+  if (!modoEditor) return;
+  if (semanas[si].dias[di].confirmado) desconfirmarDia(si, di);
+  semanas[si].dias.splice(di, 1);
+  guardar();
+}
+function toggleTrabajador(si, di, p) {
+  if (!modoEditor) return;
+  const d = semanas[si].dias[di];
+  if (d.confirmado) return;
+  if (d.trabajadores.includes(p)) { d.trabajadores = d.trabajadores.filter(x => x !== p); if (d.personaBarra === p) d.personaBarra = null; }
+  else d.trabajadores.push(p);
+  d.asignaciones = null;
+  guardar();
+}
+function setBarra(si, di, p) {
+  if (!modoEditor) return;
+  const d = semanas[si].dias[di];
+  if (d.confirmado) return;
+  d.personaBarra = p || null;
+  d.asignaciones = null;
+  guardar();
+}
+
+// =============== TAREAS SEMANALES: cuáles tocan ===============
+// Devuelve set de ids de tareas semanales YA hechas (check marcado) en esta semana
+function semanalesHechasEnSemana(semana) {
+  const hechas = new Set();
+  semana.dias.forEach(d => {
+    if (!d.asignaciones) return;
+    ['antes', 'despues'].forEach(bk => {
+      Object.entries(d.asignaciones[bk] || {}).forEach(([tid, info]) => {
+        const t = tareaPorId(tid);
+        if (t && t.semanal && info.checked) hechas.add(tid);
+      });
+    });
+  });
+  return hechas;
+}
+// Devuelve set de ids de tareas semanales YA asignadas (aunque no hechas) en otros días de la semana
+function semanalesAsignadasEnSemana(semana, exceptoDiaId) {
+  const asignadas = new Set();
+  semana.dias.forEach(d => {
+    if (d.id === exceptoDiaId) return;
+    if (!d.asignaciones) return;
+    ['antes', 'despues'].forEach(bk => {
+      Object.keys(d.asignaciones[bk] || {}).forEach(tid => {
+        const t = tareaPorId(tid);
+        if (t && t.semanal) asignadas.add(tid);
+      });
+    });
+  });
+  return asignadas;
+}
+
+// =============== ALGORITMO DE REPARTO ===============
+function elegirReservas(noBarra, histTemp) {
+  const pref = PREFERENCIA_RESERVAS.filter(p => noBarra.includes(p));
+  if (pref.length > 0) {
+    const t1 = pref.filter(p => p === 'Miguel' || p === 'Sergio');
+    if (t1.length > 0) { t1.sort((a, b) => contar(a, 'reservas', histTemp) - contar(b, 'reservas', histTemp)); return t1[0]; }
+    const t2 = pref.filter(p => p === 'Mireya' || p === 'Alexandru');
+    if (t2.length > 0) { t2.sort((a, b) => contar(a, 'reservas', histTemp) - contar(b, 'reservas', histTemp)); return t2[0]; }
+  }
+  const cs = [...noBarra].sort((a, b) => {
+    const ca = contar(a, 'reservas', histTemp), cb = contar(b, 'reservas', histTemp);
+    if (ca !== cb) return ca - cb;
+    return contarTotal(a, histTemp) - contarTotal(b, histTemp);
+  });
+  return cs[0];
+}
+
+function repartirDia(si, di) {
+  const semana = semanas[si];
+  const dia = semana.dias[di];
+  const trabajadores = [...dia.trabajadores];
+  const personaBarra = dia.personaBarra;
+  const noBarra = trabajadores.filter(t => t !== personaBarra);
+  const histTemp = JSON.parse(JSON.stringify(historico));
+  const asignaciones = { antes: {}, despues: {}, barra: personaBarra || null };
+
+  // Determinar qué tareas semanales tocan este día:
+  // - las que NO se han hecho ni asignado ya en la semana
+  const hechas = semanalesHechasEnSemana(semana);
+  const asignadasOtros = semanalesAsignadasEnSemana(semana, dia.id);
+  const pendientesSemanales = tareasSemanales().filter(t => !hechas.has(t.id) && !asignadasOtros.has(t.id));
+
+  // ¿Cuántas semanales meter hoy? Repartir equitativo entre los días restantes de la semana.
+  const totalDias = semana.dias.length;
+  const idxDia = di;
+  const diasRestantesIncluyendoHoy = totalDias - idxDia;
+  let cuantasHoy = pendientesSemanales.length;
+  if (diasRestantesIncluyendoHoy > 1) {
+    cuantasHoy = Math.ceil(pendientesSemanales.length / diasRestantesIncluyendoHoy);
+  }
+  // Las semanales priorizadas: las que menos veces se han hecho en el histórico van primero
+  const semanalesOrdenadas = [...pendientesSemanales].sort((a, b) => {
+    const ca = Object.values(historico).reduce((s, h) => s + (h[a.id] || 0), 0);
+    const cb = Object.values(historico).reduce((s, h) => s + (h[b.id] || 0), 0);
+    return ca - cb;
+  });
+  const semanalesHoy = semanalesOrdenadas.slice(0, cuantasHoy);
+  const idsSemanalesHoy = new Set(semanalesHoy.map(t => t.id));
+
+  // Lista de tareas a repartir hoy en bloque 'antes': diarias obligatorias/opcionales + semanales de hoy
+  // En 'despues': las de ese bloque
+  const barraExtra = { antes: 0, despues: 0 };
+  const cargaTurno = {};
+  function recalcularCarga() {
+    Object.keys(cargaTurno).forEach(k => delete cargaTurno[k]);
+    ['antes', 'despues'].forEach(bk => {
+      Object.values(asignaciones[bk]).forEach(info => {
+        if (info && info.persona) cargaTurno[info.persona] = (cargaTurno[info.persona] || 0) + 1;
+        if (info && info.personas) info.personas.forEach(p => { cargaTurno[p.persona] = (cargaTurno[p.persona] || 0) + 1; });
+      });
+    });
+  }
+  function elegirPersona(tarea, evitar, bloqueKey) {
+    recalcularCarga();
+    let pool = noBarra.filter(p => !evitar.includes(p));
+    const barraPuede = personaBarra && !evitar.includes(personaBarra) && barraExtra[bloqueKey] < 1;
+    if (pool.length === 0 && barraPuede) return { persona: personaBarra, esBarra: true };
+    if (pool.length === 0) { pool = noBarra.filter(p => !evitar.includes(p)); if (pool.length === 0) pool = [...noBarra]; }
+    if (pool.length === 0) return null;
+    pool.sort((a, b) => {
+      const cA = cargaTurno[a] || 0, cB = cargaTurno[b] || 0;
+      if (cA !== cB) return cA - cB;
+      const ca = contar(a, tarea.id, histTemp), cb = contar(b, tarea.id, histTemp);
+      if (ca !== cb) return ca - cb;
+      return contarTotal(a, histTemp) - contarTotal(b, histTemp);
+    });
+    return { persona: pool[0], esBarra: false };
+  }
+
+  // Prioritarias primero
+  const prioritarias = tareas.filter(t => t.prioritaria && !t.deBarra);
+  prioritarias.forEach(tarea => {
+    const res = elegirPersona(tarea, [], tarea.bloque);
+    if (!res || !res.persona) return;
+    asignaciones[tarea.bloque][tarea.id] = { persona: res.persona, parentesis: false, checked: false };
+    if (res.esBarra) barraExtra[tarea.bloque]++;
+    if (!histTemp[res.persona]) histTemp[res.persona] = {};
+    histTemp[res.persona][tarea.id] = (histTemp[res.persona][tarea.id] || 0) + 1;
+  });
+
+  function asignarBloque(bloqueKey) {
+    // tareas de este bloque: diarias (no semanal, no barra, no prioritaria) + semanales de hoy de este bloque
+    const diarias = tareas.filter(t => t.bloque === bloqueKey && !t.deBarra && !t.prioritaria && !t.semanal);
+    const obligatorias = diarias.filter(t => t.obligatoria);
+    const opcionales = diarias.filter(t => !t.obligatoria);
+    const semanalesBloque = semanalesHoy.filter(t => t.bloque === bloqueKey);
+
+    // Orden de asignación: obligatorias → semanales de hoy → opcionales
+    const ordenadas = [...obligatorias, ...semanalesBloque, ...opcionales];
+    ordenadas.forEach(tarea => {
+      if (asignaciones[bloqueKey][tarea.id]) return;
+      const numP = (tarea.doble && trabajadores.length >= 5) ? 2 : 1;
+      const elegidos = [];
+      for (let i = 0; i < numP; i++) {
+        const evitar = elegidos.map(e => e.persona);
+        const res = elegirPersona(tarea, evitar, bloqueKey);
+        if (!res || !res.persona) break;
+        elegidos.push({ persona: res.persona, parentesis: false });
+        if (res.esBarra) barraExtra[bloqueKey]++;
+        if (!histTemp[res.persona]) histTemp[res.persona] = {};
+        histTemp[res.persona][tarea.id] = (histTemp[res.persona][tarea.id] || 0) + 1;
+      }
+      if (numP > 1) asignaciones[bloqueKey][tarea.id] = { personas: elegidos, checked: false };
+      else if (elegidos.length === 1) asignaciones[bloqueKey][tarea.id] = { ...elegidos[0], checked: false };
+    });
+  }
+  asignarBloque('antes');
+  asignarBloque('despues');
+  // Crear entradas para las tareas marcadas deBarra (asignadas a la persona de barra) para que tengan check
+  if (asignaciones.barra) {
+    tareas.filter(tk => tk.deBarra).forEach(tk => {
+      asignaciones[tk.bloque][tk.id] = { persona: asignaciones.barra, checked: false, esBarra: true };
+    });
+  }
+  return asignaciones;
+}
+
+function generarReparto(si, di) {
+  if (!modoEditor) return;
+  const d = semanas[si].dias[di];
+  if (!d.trabajadores || d.trabajadores.length === 0) return;
+  d.asignaciones = repartirDia(si, di);
+  d.confirmado = false;
+  guardar();
+}
+
+function confirmarDia(si, di) {
+  if (!modoEditor) return;
+  const d = semanas[si].dias[di];
+  if (!d.asignaciones || d.confirmado) return;
+  const a = d.asignaciones;
+  ['antes', 'despues'].forEach(b => {
+    Object.entries(a[b] || {}).forEach(([tid, info]) => {
+      if (info.personas) { info.personas.forEach(p => { if (!historico[p.persona]) historico[p.persona] = {}; historico[p.persona][tid] = (historico[p.persona][tid] || 0) + 1; }); return; }
+      if (!historico[info.persona]) historico[info.persona] = {};
+      historico[info.persona][tid] = (historico[info.persona][tid] || 0) + 1;
+    });
+  });
+  if (a.barra) {
+    if (!historico[a.barra]) historico[a.barra] = {};
+    historico[a.barra]['barra_count'] = (historico[a.barra]['barra_count'] || 0) + 1;
+    // Las tareas deBarra (Café+Aceros) ya están en el bloque y se sumaron arriba. Solo recargar cámaras aparte.
+    historico[a.barra]['recargar_camaras'] = (historico[a.barra]['recargar_camaras'] || 0) + 1;
+  }
+  d.confirmado = true;
+  guardar();
+}
+function desconfirmarDia(si, di) {
+  if (!modoEditor) return;
+  const d = semanas[si].dias[di];
+  if (!d.confirmado || !d.asignaciones) return;
+  const a = d.asignaciones;
+  ['antes', 'despues'].forEach(b => {
+    Object.entries(a[b] || {}).forEach(([tid, info]) => {
+      if (info.personas) { info.personas.forEach(p => { if (historico[p.persona] && historico[p.persona][tid]) historico[p.persona][tid] = Math.max(0, historico[p.persona][tid] - 1); }); return; }
+      if (historico[info.persona] && historico[info.persona][tid]) historico[info.persona][tid] = Math.max(0, historico[info.persona][tid] - 1);
+    });
+  });
+  if (a.barra && historico[a.barra]) {
+    if (historico[a.barra]['barra_count']) historico[a.barra]['barra_count'] = Math.max(0, historico[a.barra]['barra_count'] - 1);
+    if (historico[a.barra]['recargar_camaras']) historico[a.barra]['recargar_camaras'] = Math.max(0, historico[a.barra]['recargar_camaras'] - 1);
+  }
+  d.confirmado = false;
+  guardar();
+}
+
+// =============== CHECK (desde modo normal también) ===============
+function toggleCheck(si, di, bloque, tareaId) {
+  const d = semanas[si].dias[di];
+  if (!d.asignaciones) return;
+  const info = d.asignaciones[bloque][tareaId];
+  if (!info) return;
+  info.checked = !info.checked;
+  guardarCheck();
+  render();
+}
+
+// =============== CAMBIAR / AÑADIR PERSONA ===============
+function abrirModalPersona(si, di, tipo, params) {
+  if (!modoEditor) return;
+  const modal = document.getElementById('modalPersona');
+  const opts = document.getElementById('modalOptions');
+  const title = document.getElementById('modalTitle');
+  const d = semanas[si].dias[di];
+  let personaActual = '', titulo = '', permitirQuitar = false;
+  if (tipo === 'barra') { personaActual = d.asignaciones.barra; titulo = 'Persona en barra'; }
+  else {
+    const info = d.asignaciones[params.bloque][params.tareaId];
+    const tObj = tareaPorId(params.tareaId);
+    titulo = tObj ? tObj.nombre : params.tareaId;
+    if (params.modo === 'add') { titulo = 'Añadir ayuda a: ' + titulo; }
+    else {
+      if (info.personas) personaActual = info.personas[params.idxPersona].persona;
+      else personaActual = info.persona;
+      if (info.personas && info.personas.length > 1) permitirQuitar = true;
+    }
+  }
+  title.textContent = titulo;
+  let html = personas.map(p => `<button class="modal-option ${p === personaActual ? 'current' : ''}" onclick='aplicarCambioPersona(${si}, ${di}, "${tipo}", ${JSON.stringify(params)}, "${esc(p)}")'>${esc(p)}</button>`).join('');
+  if (permitirQuitar) {
+    html += `<button class="modal-option quitar" onclick='quitarPersona(${si}, ${di}, ${JSON.stringify(params)})'>✕ Quitar a ${esc(personaActual)}</button>`;
+  }
+  opts.innerHTML = html;
+  modal.classList.add('show');
+}
+function cerrarModal() { document.getElementById('modalPersona').classList.remove('show'); }
+
+function aplicarCambioPersona(si, di, tipo, params, nuevaPersona) {
+  if (!modoEditor) return;
+  const d = semanas[si].dias[di];
+  const a = d.asignaciones;
+  const confirmado = d.confirmado;
+  if (tipo === 'barra') {
+    const ant = a.barra; a.barra = nuevaPersona;
+    // Actualizar las entradas de tareas deBarra en los bloques para que apunten a la nueva persona
+    tareas.filter(tk => tk.deBarra).forEach(tk => {
+      if (a[tk.bloque] && a[tk.bloque][tk.id]) a[tk.bloque][tk.id].persona = nuevaPersona;
+    });
+    if (confirmado && ant !== nuevaPersona) {
+      if (historico[ant]) {
+        if (historico[ant]['barra_count']) historico[ant]['barra_count'] = Math.max(0, historico[ant]['barra_count'] - 1);
+        // Las tareas deBarra están en el bloque: restar al anterior, sumar al nuevo
+        tareas.filter(tk => tk.deBarra).forEach(tk => { if (historico[ant][tk.id]) historico[ant][tk.id] = Math.max(0, historico[ant][tk.id] - 1); });
+        if (historico[ant]['recargar_camaras']) historico[ant]['recargar_camaras'] = Math.max(0, historico[ant]['recargar_camaras'] - 1);
+      }
+      if (!historico[nuevaPersona]) historico[nuevaPersona] = {};
+      historico[nuevaPersona]['barra_count'] = (historico[nuevaPersona]['barra_count'] || 0) + 1;
+      tareas.filter(tk => tk.deBarra).forEach(tk => { historico[nuevaPersona][tk.id] = (historico[nuevaPersona][tk.id] || 0) + 1; });
+      historico[nuevaPersona]['recargar_camaras'] = (historico[nuevaPersona]['recargar_camaras'] || 0) + 1;
+    }
+  } else {
+    const info = a[params.bloque][params.tareaId];
+    if (params.modo === 'add') {
+      // Convertir a multi-persona y añadir
+      let lista;
+      if (info.personas) lista = info.personas;
+      else { lista = [{ persona: info.persona }]; }
+      if (!lista.find(x => x.persona === nuevaPersona)) {
+        lista.push({ persona: nuevaPersona });
+        if (confirmado) { if (!historico[nuevaPersona]) historico[nuevaPersona] = {}; historico[nuevaPersona][params.tareaId] = (historico[nuevaPersona][params.tareaId] || 0) + 1; }
+      }
+      a[params.bloque][params.tareaId] = { personas: lista, checked: info.checked || false };
+    } else {
+      let ant;
+      if (info.personas) { ant = info.personas[params.idxPersona].persona; info.personas[params.idxPersona].persona = nuevaPersona; }
+      else { ant = info.persona; info.persona = nuevaPersona; }
+      if (confirmado && ant !== nuevaPersona) {
+        if (historico[ant] && historico[ant][params.tareaId]) historico[ant][params.tareaId] = Math.max(0, historico[ant][params.tareaId] - 1);
+        if (!historico[nuevaPersona]) historico[nuevaPersona] = {};
+        historico[nuevaPersona][params.tareaId] = (historico[nuevaPersona][params.tareaId] || 0) + 1;
+      }
+    }
+  }
+  cerrarModal();
+  guardar();
+}
+
+function quitarPersona(si, di, params) {
+  if (!modoEditor) return;
+  const d = semanas[si].dias[di];
+  const info = d.asignaciones[params.bloque][params.tareaId];
+  if (!info || !info.personas) { cerrarModal(); return; }
+  const quitada = info.personas[params.idxPersona].persona;
+  info.personas.splice(params.idxPersona, 1);
+  if (d.confirmado && historico[quitada] && historico[quitada][params.tareaId]) historico[quitada][params.tareaId] = Math.max(0, historico[quitada][params.tareaId] - 1);
+  // si queda solo una, volver a formato simple
+  if (info.personas.length === 1) d.asignaciones[params.bloque][params.tareaId] = { persona: info.personas[0].persona, checked: info.checked || false };
+  cerrarModal();
+  guardar();
+}
+
+// Quitar una tarea de un día concreto (no de la lista general)
+function quitarTareaDia(si, di, bloque, tareaId) {
+  if (!modoEditor) return;
+  const d = semanas[si].dias[di];
+  const info = d.asignaciones[bloque][tareaId];
+  if (!info) return;
+  if (!confirm('¿Quitar esta tarea solo de este día?')) return;
+  if (d.confirmado) {
+    if (info.personas) info.personas.forEach(p => { if (historico[p.persona] && historico[p.persona][tareaId]) historico[p.persona][tareaId] = Math.max(0, historico[p.persona][tareaId] - 1); });
+    else if (info.persona && historico[info.persona] && historico[info.persona][tareaId]) historico[info.persona][tareaId] = Math.max(0, historico[info.persona][tareaId] - 1);
+  }
+  delete d.asignaciones[bloque][tareaId];
+  guardar();
+}
+
+// Añadir una tarea (de la lista general) a un día concreto
+function abrirModalAñadirTareaDia(si, di, bloque) {
+  if (!modoEditor) return;
+  const d = semanas[si].dias[di];
+  const modal = document.getElementById('modalPersona');
+  const opts = document.getElementById('modalOptions');
+  const title = document.getElementById('modalTitle');
+  title.textContent = 'Añadir tarea (' + (bloque === 'antes' ? 'antes' : 'después') + ')';
+  const yaEn = new Set(Object.keys(d.asignaciones[bloque] || {}));
+  const candidatas = tareas.filter(t => t.bloque === bloque && !t.deBarra && !yaEn.has(t.id));
+  if (candidatas.length === 0) {
+    opts.innerHTML = '<p style="color:var(--text-3); font-size:14px; padding:8px;">Todas las tareas de este bloque ya están en el día.</p>';
+  } else {
+    opts.innerHTML = candidatas.map(t => `<button class="modal-option" onclick="aplicarAñadirTareaDia(${si}, ${di}, '${bloque}', '${t.id}')">${esc(t.nombre)}</button>`).join('');
+  }
+  modal.classList.add('show');
+}
+function aplicarAñadirTareaDia(si, di, bloque, tareaId) {
+  if (!modoEditor) return;
+  const d = semanas[si].dias[di];
+  const noBarra = d.trabajadores.filter(t => t !== d.personaBarra);
+  let persona = noBarra[0] || d.trabajadores[0];
+  if (noBarra.length > 0) {
+    persona = [...noBarra].sort((a, b) => {
+      const ca = contar(a, tareaId), cb = contar(b, tareaId);
+      if (ca !== cb) return ca - cb;
+      return contarTotal(a) - contarTotal(b);
+    })[0];
+  }
+  d.asignaciones[bloque][tareaId] = { persona, checked: false };
+  if (d.confirmado) { if (!historico[persona]) historico[persona] = {}; historico[persona][tareaId] = (historico[persona][tareaId] || 0) + 1; }
+  cerrarModal();
+  guardar();
+}
+
+// =============== WHATSAPP ===============
+function generarTextoWhatsapp(si, di) {
+  const semana = semanas[si];
+  const d = semana.dias[di];
+  if (!d.asignaciones) return '';
+  const a = d.asignaciones;
+  let txt = `*🧹 ${d.dia.toUpperCase()} · ${d.turno.toUpperCase()}*\n_${semana.nombre}_\n━━━━━━━━━━━━━━━\n\n`;
+  if (a.barra) {
+    const tb = tareas.filter(tk => tk.deBarra).map(tk => tk.nombre).join(' + ');
+    txt += `🍺 *BARRA*\n${a.barra} → Limpiar barra, reponer, preparar servicio${tb ? ' + ' + tb : ''} + Recargar cámaras\n\n`;
+  }
+  const fp = (info) => info.personas ? info.personas.map(p => p.persona).join(' + ') : info.persona;
+  txt += `*⏰ ANTES DEL SERVICIO*\n`;
+  tareasAntes().forEach(tr => {
+    if (tr.deBarra) return;
+    const info = a.antes[tr.id]; if (!info) return;
+    const pre = tr.prioritaria ? '⭐ ' : (tr.semanal ? '📅 ' : '• ');
+    txt += `${pre}${tr.nombre} → ${fp(info)}\n`;
+  });
+  txt += `\n*🌙 DESPUÉS DEL SERVICIO*\n`;
+  tareasDespues().forEach(tr => {
+    if (tr.deBarra) return;
+    const info = a.despues[tr.id]; if (!info) return;
+    const pre = tr.prioritaria ? '⭐ ' : (tr.semanal ? '📅 ' : '• ');
+    txt += `${pre}${tr.nombre} → ${fp(info)}\n`;
+  });
+  txt += `\n━━━━━━━━━━━━━━━\n_⭐ prioritaria · 📅 semanal_\n\n*📌 IMPORTANTE: Si alguien acaba sus tareas, debe ayudar al resto a terminar las suyas. Trabajamos en equipo.*`;
+  return txt;
+}
+function copiarDia(si, di) {
+  const texto = generarTextoWhatsapp(si, di);
+  if (!texto) return;
+  navigator.clipboard.writeText(texto).then(() => mostrarBadge('copiedBadge')).catch(() => {
+    const ta = document.createElement('textarea'); ta.value = texto; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    mostrarBadge('copiedBadge');
+  });
+}
+
+// =============== PERSONAS ===============
+function añadirPersona() {
+  if (!modoEditor) return;
+  const inp = document.getElementById('nuevaPersona');
+  const n = inp.value.trim();
+  if (n && !personas.includes(n)) { personas.push(n); inp.value = ''; guardar(); }
+}
+function eliminarPersona(p) {
+  if (!modoEditor) return;
+  if (!confirm(`¿Eliminar a ${p}?`)) return;
+  personas = personas.filter(x => x !== p);
+  guardar();
+}
+function resetearHistorico() {
+  if (!modoEditor) return;
+  if (!confirm('¿Borrar todo el histórico?')) return;
+  historico = {};
+  semanas.forEach(s => s.dias.forEach(d => d.confirmado = false));
+  guardar();
+}
+function resetearTodo() {
+  if (!modoEditor) return;
+  if (!confirm('¿Borrar TODO (personas, tareas, semanas e histórico)?')) return;
+  personas = [...PERSONAS_INICIALES]; semanas = []; historico = {}; tareas = JSON.parse(JSON.stringify(TAREAS_DEFAULT));
+  guardar();
+}
+
+// =============== RENDER ===============
+function render() {
+  document.getElementById('personasList').innerHTML = personas.map(p =>
+    `<span class="pill">${esc(p)} ${modoEditor ? `<button onclick="eliminarPersona('${esc(p)}')">✕</button>` : ''}</span>`
+  ).join('');
+  renderTareasEditor();
+
+  const cont = document.getElementById('semanasContainer');
+  if (semanas.length === 0) {
+    cont.innerHTML = `<div class="empty"><div class="empty-icon">◇</div><div class="empty-text">Sin semanas</div><div class="empty-sub">${modoEditor ? 'Pulsa "+ Nueva semana" para empezar' : 'Aún no se ha creado ningún cuadrante'}</div></div>`;
+    document.getElementById('historicoTable').innerHTML = renderHistorico();
+    return;
+  }
+  cont.innerHTML = semanas.map((semana, si) => renderSemana(semana, si)).join('');
+  document.getElementById('historicoTable').innerHTML = renderHistorico();
+}
+
+function renderSemana(semana, si) {
+  const diasHTML = semana.dias.map((dia, di) => renderDia(si, di, dia)).join('');
+  const addRow = modoEditor ? `
+    <div class="dia-add-row">
+      <select id="diaSelect_${si}">${DIAS_SEMANA.map(d => `<option value="${d}">${d}</option>`).join('')}</select>
+      <select id="turnoSelect_${si}">${TURNOS_TIPO.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
+      <button class="btn btn-ghost" onclick="añadirDia(${si})">+ Añadir día</button>
+    </div>` : '';
+  // Estado de tareas semanales
+  const hechas = semanalesHechasEnSemana(semana);
+  const totalSem = tareasSemanales().length;
+  const semStatus = totalSem > 0 ? `<span class="dia-tag" style="background:var(--purple-soft); color:var(--purple);">📅 ${hechas.size}/${totalSem} semanales hechas</span>` : '';
+  return `
+    <div class="semana-block">
+      <div class="semana-head">
+        <input type="text" class="semana-name" value="${esc(semana.nombre)}" ${!modoEditor ? 'disabled' : ''} onchange="actualizarNombreSemana(${si}, this.value)" />
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          ${semStatus}
+          ${modoEditor ? `<button class="btn-link danger" onclick="eliminarSemana(${si})">Eliminar</button>` : ''}
+        </div>
+      </div>
+      ${addRow}
+      ${diasHTML || (!modoEditor ? '<div class="empty" style="padding:30px;"><div class="empty-sub">Sin días añadidos</div></div>' : '')}
+    </div>`;
+}
+
+function renderDia(si, di, dia) {
+  const cls = dia.confirmado ? 'dia-card confirmado' : 'dia-card';
+  const tp = personas.map(p => {
+    const a = dia.trabajadores.includes(p);
+    return `<button class="worker-pill ${a ? 'active' : ''}" ${dia.confirmado || !modoEditor ? 'disabled' : ''} onclick="toggleTrabajador(${si}, ${di}, '${esc(p)}')">${esc(p)}</button>`;
+  }).join('');
+  const bs = dia.trabajadores.length > 0 ? `
+    <div class="field-block">
+      <div class="field-label">🍺 Persona en barra</div>
+      <select ${dia.confirmado || !modoEditor ? 'disabled' : ''} onchange="setBarra(${si}, ${di}, this.value)">
+        <option value="">— Nadie en barra —</option>
+        ${dia.trabajadores.map(t => `<option value="${esc(t)}" ${dia.personaBarra === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}
+      </select>
+      ${dia.personaBarra ? `<div class="barra-note"><b>${esc(dia.personaBarra)}</b> en barra: limpiar barra, reponer, preparar servicio, tareas 🍺 y recargar cámaras.</div>` : ''}
+    </div>` : '';
+  const gb = !dia.confirmado && modoEditor ? `<button class="btn btn-primary" ${dia.trabajadores.length === 0 ? 'disabled' : ''} onclick="generarReparto(${si}, ${di})">✦ ${dia.asignaciones ? 'Regenerar' : 'Generar reparto'}</button>` : '';
+  return `<div class="${cls}">
+    <div class="dia-header">
+      <div class="dia-titulo">${esc(dia.dia)} <span class="dia-tag">${esc(dia.turno)}</span></div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        ${dia.confirmado ? '<span class="confirmed-tag">✓ Confirmado</span>' : ''}
+        ${modoEditor ? `<button class="del-btn" onclick="eliminarDia(${si}, ${di})">🗑</button>` : ''}
+      </div>
+    </div>
+    <div class="dia-body">
+      ${modoEditor ? `<div class="field-block"><div class="field-label">¿Quiénes trabajan?</div><div style="display:flex; flex-wrap:wrap; gap:6px;">${tp}</div></div>` : (dia.trabajadores.length > 0 ? `<div class="field-block"><div class="field-label">Equipo</div><div style="display:flex; flex-wrap:wrap; gap:6px;">${dia.trabajadores.map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div></div>` : '')}
+      ${modoEditor ? bs : ''}
+      ${gb}
+      ${dia.asignaciones ? renderAsignaciones(si, di, dia) : ''}
+    </div>
+  </div>`;
+}
+
+function renderAsignaciones(si, di, dia) {
+  const a = dia.asignaciones;
+  const renderPersona = (persona, onClick) => {
+    const ed = modoEditor ? 'editable' : '';
+    const click = modoEditor ? `onclick="${onClick}"` : '';
+    return `<span class="tarea-persona ${ed}" ${click}>${esc(persona)}</span>`;
+  };
+  const checkBox = (bloque, tareaId, checked) => `<div class="tarea-check ${checked ? 'checked' : ''}" onclick="toggleCheck(${si}, ${di}, '${bloque}', '${tareaId}')">${checked ? '✓' : ''}</div>`;
+
+  const tareaHTML = (arr, bk) => arr.map(t => {
+    if (t.deBarra) {
+      if (!a.barra) return '';
+      const info = a[bk][t.id] || {};
+      const quitarBtn = modoEditor ? `<button class="del-btn" onclick="quitarTareaDia(${si}, ${di}, '${bk}', '${t.id}')" title="Quitar de este día">✕</button>` : '';
+      return `<div class="tarea-row barra-row ${info.checked ? 'hecha' : ''}">
+        <div class="tarea-left">${checkBox(bk, t.id, info.checked)}<span class="tarea-nombre">🍺 ${esc(t.nombre)}</span></div>
+        <div class="tarea-derecha">${renderPersona(a.barra, `abrirModalPersona(${si}, ${di}, 'barra', {})`)}${quitarBtn}</div></div>`;
+    }
+    const info = a[bk][t.id]; if (!info) return '';
+    let cls = 'tarea-row';
+    if (t.prioritaria) cls += ' prioritaria';
+    if (t.semanal) cls += ' semanal';
+    if (info.checked) cls += ' hecha';
+    let pH = '';
+    if (info.personas) {
+      pH = info.personas.map((p, idx) => renderPersona(p.persona, `abrirModalPersona(${si}, ${di}, 'tarea', {bloque:'${bk}',tareaId:'${t.id}',idxPersona:${idx}})`)).join(' <span style="color:var(--text-4);">+</span> ');
+    } else {
+      pH = renderPersona(info.persona, `abrirModalPersona(${si}, ${di}, 'tarea', {bloque:'${bk}',tareaId:'${t.id}'})`);
+    }
+    const addBtn = modoEditor ? `<button class="add-person-btn" onclick="abrirModalPersona(${si}, ${di}, 'tarea', {bloque:'${bk}',tareaId:'${t.id}',modo:'add'})" title="Añadir ayuda">+</button>` : '';
+    const quitarBtn = modoEditor ? `<button class="del-btn" onclick="quitarTareaDia(${si}, ${di}, '${bk}', '${t.id}')" title="Quitar de este día">✕</button>` : '';
+    const est = t.prioritaria ? '<span class="estrella">⭐</span>' : (t.semanal ? '<span class="badge-sem">📅</span>' : '');
+    return `<div class="${cls}">
+      <div class="tarea-left">${checkBox(bk, t.id, info.checked)}<span class="tarea-nombre">${est}${esc(t.nombre)}</span></div>
+      <div class="tarea-derecha">${pH}${addBtn}${quitarBtn}</div></div>`;
+  }).join('');
+
+  const bH = a.barra ? `<div class="bloque-tareas"><h4>🍺 Barra</h4><div class="tarea-row barra-row"><div class="tarea-left"><span class="tarea-nombre">Limpiar barra · Reponer · Preparar · Tareas 🍺 · Cámaras</span></div><div class="tarea-derecha">${renderPersona(a.barra, `abrirModalPersona(${si}, ${di}, 'barra', {})`)}</div></div></div>` : '';
+  const ab = modoEditor ? (dia.confirmado
+    ? `<button class="btn btn-ghost" onclick="desconfirmarDia(${si}, ${di})">↺ Deshacer</button>`
+    : `<button class="btn btn-green" onclick="confirmarDia(${si}, ${di})">✓ Confirmar y guardar</button>`) : '';
+  const cb = `<button class="btn btn-whatsapp" onclick="copiarDia(${si}, ${di})">📋 Copiar para WhatsApp</button>`;
+  const ayuda = modoEditor ? '<p class="hint">✦ Pulsa un nombre para cambiarlo · pulsa + para añadir ayuda · marca el check al terminar</p>' : '<p class="hint">✓ Marca cada tarea cuando la termines</p>';
+  const addAntes = modoEditor ? `<button class="btn btn-ghost btn-icon" style="margin-top:6px; width:100%;" onclick="abrirModalAñadirTareaDia(${si}, ${di}, 'antes')">+ Añadir tarea a este día</button>` : '';
+  const addDespues = modoEditor ? `<button class="btn btn-ghost btn-icon" style="margin-top:6px; width:100%;" onclick="abrirModalAñadirTareaDia(${si}, ${di}, 'despues')">+ Añadir tarea a este día</button>` : '';
+  return `<div class="asignaciones">${bH}
+    <div class="bloque-tareas"><h4>Antes del servicio</h4>${tareaHTML(tareasAntes(), 'antes')}${addAntes}</div>
+    <div class="bloque-tareas"><h4>Después del servicio</h4>${tareaHTML(tareasDespues(), 'despues')}${addDespues}</div>
+    ${ayuda}
+    <div class="actions">${ab} ${cb}</div></div>`;
+}
+
+function renderTareasEditor() {
+  const renderBloque = (arr) => arr.map((t, idx) => {
+    const flags = `
+      <span class="flag-badge ${t.obligatoria ? 'on-oblig' : ''}" ${modoEditor ? `onclick="toggleFlag('${t.id}','obligatoria')"` : ''} title="Obligatoria">✓</span>
+      <span class="flag-badge ${t.prioritaria ? 'on-prio' : ''}" ${modoEditor ? `onclick="toggleFlag('${t.id}','prioritaria')"` : ''} title="Prioritaria">⭐</span>
+      <span class="flag-badge ${t.deBarra ? 'on-barra' : ''}" ${modoEditor ? `onclick="toggleFlag('${t.id}','deBarra')"` : ''} title="De barra">🍺</span>
+      <span class="flag-badge ${t.doble ? 'on-doble' : ''}" ${modoEditor ? `onclick="toggleFlag('${t.id}','doble')"` : ''} title="Doble (5+)">👥</span>
+      <span class="flag-badge ${t.semanal ? 'on-sem' : ''}" ${modoEditor ? `onclick="toggleFlag('${t.id}','semanal')"` : ''} title="Semanal">📅</span>
+    `;
+    const arrows = modoEditor ? `<div class="arrow-stack"><button class="arrow-btn" onclick="moverTarea('${t.id}','up')" ${idx === 0 ? 'disabled' : ''}>▲</button><button class="arrow-btn" onclick="moverTarea('${t.id}','down')" ${idx === arr.length - 1 ? 'disabled' : ''}>▼</button></div>` : '';
+    const delBtn = modoEditor ? `<button class="del-btn" onclick="eliminarTarea('${t.id}')">✕</button>` : '';
+    const nombre = modoEditor ? `<input class="tarea-input" value="${esc(t.nombre)}" onchange="renombrarTarea('${t.id}', this.value)" />` : `<span style="flex:1;">${esc(t.nombre)}</span>`;
+    return `<div class="tarea-editor-row">${arrows}${nombre}<div class="flags">${flags}</div>${delBtn}</div>`;
+  }).join('');
+  document.getElementById('tareasAntesList').innerHTML = renderBloque(tareasAntes());
+  document.getElementById('tareasDespuesList').innerHTML = renderBloque(tareasDespues());
+}
+
+function renderHistorico() {
+  const cols = [...tareas, TAREA_RECARGAR_CAMARAS];
+  let html = `<thead><tr><th>Persona</th>${cols.map(t => `<th title="${esc(t.nombre)}">${esc(abreviar(t.nombre))}</th>`).join('')}<th>🍺</th><th class="total-col">Total</th></tr></thead><tbody>`;
+  personas.forEach(p => {
+    const tot = contarTotal(p);
+    html += `<tr><td>${esc(p)}</td>`;
+    cols.forEach(t => { const c = contar(p, t.id); html += `<td class="${c === 0 ? 'zero' : ''}">${c}</td>`; });
+    html += `<td class="${contarBarra(p) === 0 ? 'zero' : ''}">${contarBarra(p)}</td><td class="total-col">${tot}</td></tr>`;
+  });
+  return html + '</tbody>';
+}
+
+function abreviar(n) {
+  const palabras = n.split(/[\s+]+/).filter(Boolean);
+  if (n.length <= 9) return n;
+  return palabras.map(p => p.substring(0, 4)).slice(0, 2).join('·');
+}
+
+// Exponer al onclick
+Object.assign(window, {
+  toggleAdmin, salirAdmin, añadirPersona, eliminarPersona, añadirSemana, eliminarSemana,
+  actualizarNombreSemana, añadirDia, eliminarDia, toggleTrabajador, setBarra, generarReparto,
+  confirmarDia, desconfirmarDia, copiarDia, resetearHistorico, resetearTodo, añadirTarea,
+  eliminarTarea, moverTarea, toggleFlag, renombrarTarea, abrirModalPersona, cerrarModal,
+  aplicarCambioPersona, quitarPersona, toggleCheck, quitarTareaDia, abrirModalAñadirTareaDia, aplicarAñadirTareaDia
+});
+
+document.getElementById('nuevaPersona').addEventListener('keydown', e => { if (e.key === 'Enter') añadirPersona(); });
+document.getElementById('nuevaTareaAntes').addEventListener('keydown', e => { if (e.key === 'Enter') añadirTarea('antes'); });
+document.getElementById('nuevaTareaDespues').addEventListener('keydown', e => { if (e.key === 'Enter') añadirTarea('despues'); });
+document.getElementById('modalPersona').addEventListener('click', e => { if (e.target.id === 'modalPersona') cerrarModal(); });
+</script>
+</body>
+</html>
