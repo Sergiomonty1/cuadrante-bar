@@ -27,7 +27,7 @@
     --mono: 'JetBrains Mono', ui-monospace, monospace;
     --r-sm: 8px; --r-md: 12px; --r-lg: 16px;
     --shadow-glow: 0 0 0 1px rgba(255,255,255,0.04), 0 24px 48px rgba(0,0,0,0.4);
-    --t-fast: 0.15s cubic-bezier(0.4,0,0.2,1); --t-base: 0.25s cubic-bezier(0.4,0,0.2,1); --t-slow: 0.4s cubic-bezier(0.4,0,0.2,1);
+    --t-fast: 0s; --t-base: 0s; --t-slow: 0s; /* sin animaciones: herramienta personal, prima la respuesta inmediata */
   }
   html, body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
   body { min-height: 100vh; min-height: 100dvh; padding: 16px 16px max(16px, env(safe-area-inset-bottom)) 16px; overflow-x: hidden; }
@@ -39,8 +39,7 @@
   header { padding: 24px 0 28px; position: relative; }
   .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .header-line { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); animation: pulse 2.4s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity:1; transform:scale(1);} 50% { opacity:.5; transform:scale(.85);} }
+  .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
   .eyebrow { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--text-3); }
   h1 { font-family: var(--display); font-weight: 400; font-size: clamp(40px, 9vw, 76px); letter-spacing: -0.025em; line-height: 0.95; margin-bottom: 12px; }
   h1 em { font-style: italic; color: var(--accent); }
@@ -123,6 +122,7 @@
   .tarea-derecha { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .tarea-persona { font-weight: 600; color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all var(--t-fast); border: 1px dashed transparent; font-size: 13px; }
   .tarea-persona.editable:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-2); }
+  .tarea-persona.sin-asignar { color: var(--text-4); border-color: var(--border-2); font-weight: 400; font-style: italic; }
   .add-person-btn { background: var(--bg-3); border: 1px dashed var(--border-2); color: var(--text-3); border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: all var(--t-fast); flex-shrink: 0; }
   .add-person-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
   .estrella { color: var(--blue); margin-right: 4px; font-size: 11px; }
@@ -176,11 +176,9 @@
 
   .confirmed-tag { display: inline-flex; align-items: center; gap: 5px; background: var(--green-soft); color: var(--green); padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid rgba(94,225,136,0.3); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
 
-  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 999; justify-content: center; align-items: center; padding: 20px; animation: fadeIn 0.2s; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 999; justify-content: center; align-items: center; padding: 20px; }
   .modal-overlay.show { display: flex; }
-  @keyframes fadeIn { from { opacity:0;} to { opacity:1;} }
-  .modal-card { background: var(--bg-1); border: 1px solid var(--border-2); border-radius: var(--r-lg); padding: 24px; max-width: 360px; width: 100%; box-shadow: var(--shadow-glow); animation: scaleIn 0.2s cubic-bezier(0.4,0,0.2,1); }
-  @keyframes scaleIn { from { transform:scale(0.92); opacity:0;} to { transform:scale(1); opacity:1;} }
+  .modal-card { background: var(--bg-1); border: 1px solid var(--border-2); border-radius: var(--r-lg); padding: 24px; max-width: 360px; width: 100%; box-shadow: var(--shadow-glow); }
   .modal-card h3 { font-family: var(--display); font-size: 22px; text-transform: none; letter-spacing: -0.01em; color: var(--text); margin-bottom: 16px; font-weight: 400; }
   .modal-options { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; padding-right: 4px; }
   .modal-option { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-2); cursor: pointer; text-align: left; font-family: inherit; font-size: 15px; color: var(--text); transition: all var(--t-fast); }
@@ -215,9 +213,6 @@
   .status.connected::before { background: var(--green); box-shadow: 0 0 8px rgba(94,225,136,0.6); }
   .status.error::before { background: var(--red); }
   .foot-links { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-
-  .card { animation: fadeUp 0.5s ease-out backwards; }
-  @keyframes fadeUp { from { opacity:0; transform:translateY(12px);} to { opacity:1; transform:translateY(0);} }
 
   .dia-add-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 14px; background: var(--bg-1); border: 1px dashed var(--border-2); border-radius: var(--r-md); margin-bottom: 12px; }
   .dia-add-row select { width: auto; flex: 1; min-width: 120px; }
@@ -820,22 +815,6 @@ function semanalesHechasEnSemana(semana, ts = tareas) {
   });
   return hechas;
 }
-// Set de ids de tareas semanales YA asignadas (aunque no hechas) en otros días de la semana
-function semanalesAsignadasEnSemana(semana, exceptoDiaId, ts = tareas) {
-  const asignadas = new Set();
-  semana.dias.forEach(d => {
-    if (d.id === exceptoDiaId) return;
-    if (!d.asignaciones) return;
-    ['antes', 'despues'].forEach(bk => {
-      Object.keys(d.asignaciones[bk] || {}).forEach(tid => {
-        const t = tareaPorId(tid, ts);
-        if (t && t.semanal) asignadas.add(tid);
-      });
-    });
-  });
-  return asignadas;
-}
-
 // =============== ALGORITMO DE REPARTO ===============
 function elegirReservas(noBarra, histTemp) {
   const pref = PREFERENCIA_RESERVAS.filter(p => noBarra.includes(p));
@@ -853,29 +832,14 @@ function elegirReservas(noBarra, histTemp) {
   return cs[0];
 }
 
-function repartirDia(data, semana, dia) {
+function repartirDia(data, dia) {
+  // Las tareas SEMANALES no entran en el reparto automático: se añaden a mano
+  // con "+ Añadir tarea a este día" y se les pone persona con "Cuadrar personas"
   const trabajadores = [...dia.trabajadores];
   const personaBarra = dia.personaBarra;
   const noBarra = trabajadores.filter(t => t !== personaBarra);
   const histTemp = JSON.parse(JSON.stringify(data.historico));
   const asignaciones = { antes: {}, despues: {}, barra: personaBarra || null };
-
-  // Tareas semanales que tocan: las no hechas ni asignadas ya en la semana
-  const hechas = semanalesHechasEnSemana(semana, data.tareas);
-  const asignadasOtros = semanalesAsignadasEnSemana(semana, dia.id, data.tareas);
-  const pendientesSemanales = tareasSemanales(data.tareas).filter(t => !hechas.has(t.id) && !asignadasOtros.has(t.id));
-
-  // Repartir equitativo entre los días que aún no tienen reparto (incluyendo este)
-  const diasSinReparto = semana.dias.filter(dd => dd.id === dia.id || !dd.asignaciones).length;
-  let cuantasHoy = pendientesSemanales.length;
-  if (diasSinReparto > 1) cuantasHoy = Math.ceil(pendientesSemanales.length / diasSinReparto);
-  // Las que menos veces se han hecho en el histórico van primero
-  const semanalesOrdenadas = [...pendientesSemanales].sort((a, b) => {
-    const ca = Object.values(data.historico).reduce((s, h) => s + (h[a.id] || 0), 0);
-    const cb = Object.values(data.historico).reduce((s, h) => s + (h[b.id] || 0), 0);
-    return ca - cb;
-  });
-  const semanalesHoy = semanalesOrdenadas.slice(0, cuantasHoy);
 
   const barraExtra = { antes: 0, despues: 0 };
   const cargaTurno = {};
@@ -925,9 +889,8 @@ function repartirDia(data, semana, dia) {
     const diarias = data.tareas.filter(t => t.bloque === bloqueKey && !t.deBarra && !t.prioritaria && !t.semanal);
     const obligatorias = diarias.filter(t => t.obligatoria);
     const opcionales = diarias.filter(t => !t.obligatoria);
-    const semanalesBloque = semanalesHoy.filter(t => t.bloque === bloqueKey);
-    // Orden de asignación: obligatorias → semanales de hoy → opcionales
-    const ordenadas = [...obligatorias, ...semanalesBloque, ...opcionales];
+    // Orden de asignación: obligatorias → opcionales
+    const ordenadas = [...obligatorias, ...opcionales];
     ordenadas.forEach(tarea => {
       if (asignaciones[bloqueKey][tarea.id]) return;
       const numP = (tarea.doble && trabajadores.length >= 5) ? 2 : 1;
@@ -960,10 +923,9 @@ function generarReparto(sid, did) {
   if (!modoEditor) return;
   limpiarChecksDia(did); // los checks del reparto anterior ya no valen
   mutar(data => {
-    const s = buscarSemana(data, sid);
-    const d = buscarDia(s, did);
+    const d = buscarDia(buscarSemana(data, sid), did);
     if (!d || !d.trabajadores || d.trabajadores.length === 0) return false;
-    d.asignaciones = repartirDia(data, s, d);
+    d.asignaciones = repartirDia(data, d);
     d.confirmado = false;
   });
 }
@@ -1046,7 +1008,7 @@ function abrirModalPersona(sid, did, tipo, params) {
   const title = document.getElementById('modalTitle');
   const d = buscarDia(buscarSemana({ semanas }, sid), did);
   if (!d || !d.asignaciones) return;
-  let personaActual = '', titulo = '', permitirQuitar = false;
+  let personaActual = '', titulo = '', permitirQuitar = false, permitirVaciar = false;
   if (tipo === 'barra') { personaActual = d.asignaciones.barra; titulo = 'Persona en barra'; }
   else {
     const info = d.asignaciones[params.bloque][params.tareaId];
@@ -1056,7 +1018,7 @@ function abrirModalPersona(sid, did, tipo, params) {
     if (params.modo === 'add') { titulo = 'Añadir ayuda a: ' + titulo; }
     else {
       if (info.personas) personaActual = info.personas[params.idxPersona] ? info.personas[params.idxPersona].persona : '';
-      else personaActual = info.persona;
+      else { personaActual = info.persona; if (info.persona) permitirVaciar = true; }
       if (info.personas && info.personas.length > 1) permitirQuitar = true;
     }
   }
@@ -1064,6 +1026,9 @@ function abrirModalPersona(sid, did, tipo, params) {
   let html = personas.map(p => `<button class="modal-option ${p === personaActual ? 'current' : ''}" onclick="aplicarCambioPersona(${aj(sid)}, ${aj(did)}, ${aj(tipo)}, ${aj(params)}, ${aj(p)})">${esc(p)}</button>`).join('');
   if (permitirQuitar) {
     html += `<button class="modal-option quitar" onclick="quitarPersona(${aj(sid)}, ${aj(did)}, ${aj(params)})">✕ Quitar a ${esc(personaActual)}</button>`;
+  }
+  if (permitirVaciar) {
+    html += `<button class="modal-option quitar" onclick="aplicarCambioPersona(${aj(sid)}, ${aj(did)}, ${aj(tipo)}, ${aj(params)}, null)">✕ Dejar sin asignar</button>`;
   }
   opts.innerHTML = html;
   modal.classList.add('show');
@@ -1079,6 +1044,7 @@ function aplicarCambioPersona(sid, did, tipo, params, nuevaPersona) {
     const a = d.asignaciones;
     const confirmado = d.confirmado;
     if (tipo === 'barra') {
+      if (!nuevaPersona) return false;
       const ant = a.barra;
       if (ant === nuevaPersona) return false;
       a.barra = nuevaPersona;
@@ -1101,6 +1067,7 @@ function aplicarCambioPersona(sid, did, tipo, params, nuevaPersona) {
       const info = a[params.bloque] && a[params.bloque][params.tareaId];
       if (!info) return false;
       if (params.modo === 'add') {
+        if (!nuevaPersona) return false;
         const lista = info.personas ? info.personas : [{ persona: info.persona }];
         if (!lista.find(x => x.persona === nuevaPersona)) {
           lista.push({ persona: nuevaPersona });
@@ -1110,14 +1077,16 @@ function aplicarCambioPersona(sid, did, tipo, params, nuevaPersona) {
       } else {
         let ant;
         if (info.personas) {
-          if (!info.personas[params.idxPersona]) return false;
+          if (!nuevaPersona || !info.personas[params.idxPersona]) return false;
           ant = info.personas[params.idxPersona].persona;
           info.personas[params.idxPersona].persona = nuevaPersona;
-        } else { ant = info.persona; info.persona = nuevaPersona; }
+        } else { ant = info.persona; info.persona = nuevaPersona || null; } // null = dejar sin asignar
         if (confirmado && ant !== nuevaPersona) {
-          if (data.historico[ant] && data.historico[ant][params.tareaId]) data.historico[ant][params.tareaId] = Math.max(0, data.historico[ant][params.tareaId] - 1);
-          if (!data.historico[nuevaPersona]) data.historico[nuevaPersona] = {};
-          data.historico[nuevaPersona][params.tareaId] = (data.historico[nuevaPersona][params.tareaId] || 0) + 1;
+          if (ant && data.historico[ant] && data.historico[ant][params.tareaId]) data.historico[ant][params.tareaId] = Math.max(0, data.historico[ant][params.tareaId] - 1);
+          if (nuevaPersona) {
+            if (!data.historico[nuevaPersona]) data.historico[nuevaPersona] = {};
+            data.historico[nuevaPersona][params.tareaId] = (data.historico[nuevaPersona][params.tareaId] || 0) + 1;
+          }
         }
       }
     }
@@ -1140,10 +1109,9 @@ function quitarPersona(sid, did, params) {
   });
 }
 
-// Quitar una tarea de un día concreto (no de la lista general)
+// Quitar una tarea de un día concreto (no de la lista general) — sin preguntar
 function quitarTareaDia(sid, did, bloque, tareaId) {
   if (!modoEditor) return;
-  if (!confirm('¿Quitar esta tarea solo de este día?')) return;
   mutar(data => {
     const d = buscarDia(buscarSemana(data, sid), did);
     if (!d || !d.asignaciones) return false;
@@ -1178,19 +1146,52 @@ function abrirModalAñadirTareaDia(sid, did, bloque) {
 function aplicarAñadirTareaDia(sid, did, bloque, tareaId) {
   if (!modoEditor) return;
   cerrarModal();
+  // La tarea se añade SIN persona: la eliges tú pulsando "Sin asignar",
+  // o dejas que la ponga el botón "Cuadrar personas"
   mutar(data => {
     const d = buscarDia(buscarSemana(data, sid), did);
     if (!d || !d.asignaciones) return false;
+    d.asignaciones[bloque][tareaId] = { persona: null, checked: false };
+  });
+}
+
+// Asigna persona a todas las tareas del día que estén "Sin asignar",
+// equilibrando por carga del día, veces que ha hecho esa tarea y total histórico
+function cuadrarPersonas(sid, did) {
+  if (!modoEditor) return;
+  mutar(data => {
+    const d = buscarDia(buscarSemana(data, sid), did);
+    if (!d || !d.asignaciones) return false;
+    const a = d.asignaciones;
     const noBarra = d.trabajadores.filter(t => t !== d.personaBarra);
-    const pool = noBarra.length > 0 ? noBarra : d.trabajadores;
+    const pool = noBarra.length > 0 ? noBarra : [...d.trabajadores];
     if (pool.length === 0) return false;
-    const persona = [...pool].sort((a, b) => {
-      const ca = contar(a, tareaId, data.historico), cb = contar(b, tareaId, data.historico);
-      if (ca !== cb) return ca - cb;
-      return contarTotal(a, data.historico) - contarTotal(b, data.historico);
-    })[0];
-    d.asignaciones[bloque][tareaId] = { persona, checked: false };
-    if (d.confirmado) { if (!data.historico[persona]) data.historico[persona] = {}; data.historico[persona][tareaId] = (data.historico[persona][tareaId] || 0) + 1; }
+    const histTemp = JSON.parse(JSON.stringify(data.historico));
+    const carga = {};
+    ['antes', 'despues'].forEach(bk => Object.values(a[bk] || {}).forEach(info => {
+      if (info && info.persona) carga[info.persona] = (carga[info.persona] || 0) + 1;
+      if (info && info.personas) info.personas.forEach(p => { if (p.persona) carga[p.persona] = (carga[p.persona] || 0) + 1; });
+    }));
+    let alguna = false;
+    ['antes', 'despues'].forEach(bk => {
+      Object.entries(a[bk] || {}).forEach(([tid, info]) => {
+        if (!info || info.personas || info.persona) return;
+        const elegido = [...pool].sort((x, y) => {
+          const cx = carga[x] || 0, cy = carga[y] || 0;
+          if (cx !== cy) return cx - cy;
+          const hx = contar(x, tid, histTemp), hy = contar(y, tid, histTemp);
+          if (hx !== hy) return hx - hy;
+          return contarTotal(x, histTemp) - contarTotal(y, histTemp);
+        })[0];
+        info.persona = elegido;
+        carga[elegido] = (carga[elegido] || 0) + 1;
+        if (!histTemp[elegido]) histTemp[elegido] = {};
+        histTemp[elegido][tid] = (histTemp[elegido][tid] || 0) + 1;
+        if (d.confirmado) { if (!data.historico[elegido]) data.historico[elegido] = {}; data.historico[elegido][tid] = (data.historico[elegido][tid] || 0) + 1; }
+        alguna = true;
+      });
+    });
+    if (!alguna) return false;
   });
 }
 
@@ -1205,7 +1206,7 @@ function generarTextoWhatsapp(sid, did) {
     const tb = tareas.filter(tk => tk.deBarra).map(tk => tk.nombre).join(' + ');
     txt += `🍺 *BARRA*\n${a.barra} → Limpiar barra, reponer, preparar servicio${tb ? ' + ' + tb : ''} + Recargar cámaras\n\n`;
   }
-  const fp = (info) => info.personas ? info.personas.map(p => p.persona).join(' + ') : info.persona;
+  const fp = (info) => info.personas ? info.personas.map(p => p.persona).join(' + ') : (info.persona || '¿?');
   txt += `*⏰ ANTES DEL SERVICIO*\n`;
   tareasAntes().forEach(tr => {
     if (tr.deBarra) return;
@@ -1390,7 +1391,8 @@ function renderAsignaciones(semana, dia) {
   const renderPersona = (persona, onClick) => {
     const ed = modoEditor ? 'editable' : '';
     const click = modoEditor ? `onclick="${onClick}"` : '';
-    return `<span class="tarea-persona ${ed}" ${click}>${esc(persona)}</span>`;
+    const extra = persona ? '' : ' sin-asignar';
+    return `<span class="tarea-persona ${ed}${extra}" ${click}>${persona ? esc(persona) : 'Sin asignar'}</span>`;
   };
   const checkBox = (bloque, tareaId, checked) => `<div class="tarea-check ${checked ? 'checked' : ''}" onclick="toggleCheck(${aj(sid)}, ${aj(did)}, ${aj(bloque)}, ${aj(tareaId)})">${checked ? '✓' : ''}</div>`;
 
@@ -1425,6 +1427,8 @@ function renderAsignaciones(semana, dia) {
   }).join('');
 
   const bH = a.barra ? `<div class="bloque-tareas"><h4>🍺 Barra</h4><div class="tarea-row barra-row"><div class="tarea-left"><span class="tarea-nombre">Limpiar barra · Reponer · Preparar · Tareas 🍺 · Cámaras</span></div><div class="tarea-derecha">${renderPersona(a.barra, `abrirModalPersona(${aj(sid)}, ${aj(did)}, ${aj('barra')}, {})`)}</div></div></div>` : '';
+  const haySinAsignar = ['antes', 'despues'].some(bk => Object.values(a[bk] || {}).some(i => i && !i.persona && !i.personas));
+  const cuadrarBtn = modoEditor && haySinAsignar ? `<button class="btn btn-primary" onclick="cuadrarPersonas(${aj(sid)}, ${aj(did)})">✦ Cuadrar personas</button>` : '';
   const ab = modoEditor ? (dia.confirmado
     ? `<button class="btn btn-ghost" onclick="desconfirmarDia(${aj(sid)}, ${aj(did)})">↺ Deshacer</button>`
     : `<button class="btn btn-green" onclick="confirmarDia(${aj(sid)}, ${aj(did)})">✓ Confirmar y guardar</button>`) : '';
@@ -1436,7 +1440,7 @@ function renderAsignaciones(semana, dia) {
     <div class="bloque-tareas"><h4>Antes del servicio</h4>${tareaHTML(tareasAntes(), 'antes')}${addAntes}</div>
     <div class="bloque-tareas"><h4>Después del servicio</h4>${tareaHTML(tareasDespues(), 'despues')}${addDespues}</div>
     ${ayuda}
-    <div class="actions">${ab} ${cb}</div></div>`;
+    <div class="actions">${cuadrarBtn} ${ab} ${cb}</div></div>`;
 }
 
 function renderTareasEditor() {
@@ -1482,7 +1486,7 @@ Object.assign(window, {
   confirmarDia, desconfirmarDia, copiarDia, resetearHistorico, resetearTodo, añadirTarea,
   eliminarTarea, moverTarea, toggleFlag, renombrarTarea, abrirModalPersona, cerrarModal,
   aplicarCambioPersona, quitarPersona, toggleCheck, quitarTareaDia, abrirModalAñadirTareaDia, aplicarAñadirTareaDia,
-  abrirModalCalendario, cerrarCalendario, calMoverMes, crearSemanaDesdeFecha, crearSemanaSinFecha
+  abrirModalCalendario, cerrarCalendario, calMoverMes, crearSemanaDesdeFecha, crearSemanaSinFecha, cuadrarPersonas
 });
 
 document.getElementById('nuevaPersona').addEventListener('keydown', e => { if (e.key === 'Enter') añadirPersona(); });
