@@ -6,6 +6,9 @@
 <title>Cuadrante · Bar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -27,9 +30,10 @@
     --t-fast: 0.15s cubic-bezier(0.4,0,0.2,1); --t-base: 0.25s cubic-bezier(0.4,0,0.2,1); --t-slow: 0.4s cubic-bezier(0.4,0,0.2,1);
   }
   html, body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
-  body { min-height: 100vh; min-height: 100dvh; padding: 16px 16px max(16px, env(safe-area-inset-bottom)) 16px;
-    background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255,107,53,0.10), transparent), radial-gradient(ellipse 60% 50% at 100% 100%, rgba(97,168,255,0.04), transparent);
-    background-attachment: fixed; overflow-x: hidden; }
+  body { min-height: 100vh; min-height: 100dvh; padding: 16px 16px max(16px, env(safe-area-inset-bottom)) 16px; overflow-x: hidden; }
+  /* Fondo decorativo en capa fija propia: se compone una sola vez y no se repinta al hacer scroll */
+  body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255,107,53,0.10), transparent), radial-gradient(ellipse 60% 50% at 100% 100%, rgba(97,168,255,0.04), transparent); }
   .container { max-width: 1180px; margin: 0 auto; position: relative; }
 
   header { padding: 24px 0 28px; position: relative; }
@@ -43,7 +47,7 @@
   .subtitle { color: var(--text-2); font-size: 15px; max-width: 540px; }
   .subtitle b { color: var(--text); font-weight: 500; }
 
-  .card { background: linear-gradient(180deg, var(--bg-1) 0%, rgba(19,18,16,0.6) 100%); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 22px; margin-bottom: 16px; position: relative; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  .card { background: linear-gradient(180deg, var(--bg-1) 0%, rgba(19,18,16,0.92) 100%); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 22px; margin-bottom: 16px; position: relative; }
   .card-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
   .card-title { font-family: var(--display); font-size: 26px; letter-spacing: -0.015em; display: flex; align-items: center; gap: 10px; }
   .card-title .ic { font-size: 20px; opacity: 0.85; }
@@ -101,8 +105,7 @@
   .barra-note { background: var(--accent-soft); border: 1px solid var(--accent-glow); border-left: 3px solid var(--accent); padding: 10px 14px; margin-top: 10px; border-radius: 6px; font-size: 12px; color: var(--accent-2); line-height: 1.5; }
   .barra-note b { color: var(--accent); }
 
-  .asignaciones { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); animation: slideDown var(--t-slow); }
-  @keyframes slideDown { from { opacity:0; transform:translateY(-8px);} to { opacity:1; transform:translateY(0);} }
+  .asignaciones { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); }
   .bloque-tareas { margin-bottom: 14px; }
   .bloque-tareas h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-3); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
   .tarea-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); margin-bottom: 5px; font-size: 14px; transition: all var(--t-fast); }
@@ -310,7 +313,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
   import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-  import { getFirestore, doc, onSnapshot, setDoc, getDoc, runTransaction, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, onSnapshot, setDoc, getDoc, runTransaction, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   const firebaseConfig = {
     apiKey: "AIzaSyAFH202bdANJWTaat8HYE7JsF5zT-LGyv8",
     authDomain: "cuadrante-bar.firebaseapp.com",
@@ -321,7 +324,14 @@
   };
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
-  const db = getFirestore(app);
+  // Caché persistente: la web abre al instante con los últimos datos guardados
+  // y se sincroniza por detrás; los checks funcionan incluso sin conexión
+  let db;
+  try {
+    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  } catch (e) {
+    db = getFirestore(app);
+  }
   window._fb = { auth, db, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut, doc, onSnapshot, setDoc, getDoc, runTransaction, deleteField };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
@@ -500,15 +510,23 @@ function limpiarChecksDia(did) {
 
 function escucharCambios() {
   const { onSnapshot } = window._fb;
-  onSnapshot(docRef, (snap) => {
-    document.getElementById('connStatus').textContent = 'Conectado · tiempo real';
-    document.getElementById('connStatus').className = 'status connected';
+  onSnapshot(docRef, { includeMetadataChanges: true }, (snap) => {
+    // Con la caché persistente el primer snapshot llega del disco (fromCache):
+    // se pinta al instante y el estado avisa de que aún está sincronizando
+    const st = document.getElementById('connStatus');
+    if (snap.metadata.fromCache) {
+      st.textContent = 'Datos guardados · sincronizando…';
+      st.className = 'status';
+    } else {
+      st.textContent = 'Conectado · tiempo real';
+      st.className = 'status connected';
+    }
     // Si hay escrituras propias en vuelo, no pisar el estado optimista local;
     // al vaciarse la cola se hace una relectura final que trae la verdad del servidor.
     if (escriturasPendientes > 0) return;
     if (snap.exists()) aplicarDatos(snap.data());
     render();
-    if (!primerSync && Date.now() - ultimaEscritura < 4000) mostrarBadge('savedBadge');
+    if (!primerSync && !snap.metadata.fromCache && Date.now() - ultimaEscritura < 4000) mostrarBadge('savedBadge');
     primerSync = false;
   }, (err) => {
     document.getElementById('connStatus').textContent = 'Error: ' + err.message;
@@ -1161,7 +1179,20 @@ function resetearTodo() {
 }
 
 // =============== RENDER ===============
+// render() agrupa todas las peticiones de un mismo frame en un solo repintado,
+// y renderAhora() no toca el DOM si los datos no han cambiado (los ecos del
+// servidor tras guardar ya no producen tirones)
+let renderProgramado = false;
+let ultimoEstadoRender = '';
 function render() {
+  if (renderProgramado) return;
+  renderProgramado = true;
+  requestAnimationFrame(() => { renderProgramado = false; renderAhora(); });
+}
+function renderAhora() {
+  const estado = JSON.stringify([personas, semanas, historico, tareas, checks, modoEditor]);
+  if (estado === ultimoEstadoRender) return;
+  ultimoEstadoRender = estado;
   // Conservar el foco, lo escrito y los desplegables al repintar (los cambios en
   // tiempo real de otros ya no te borran lo que estás haciendo)
   const ae = document.activeElement;
