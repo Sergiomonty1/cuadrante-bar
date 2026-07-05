@@ -128,15 +128,17 @@
 
   .tareas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   @media (max-width: 720px) { .tareas-grid { grid-template-columns: 1fr; } }
-  .tarea-editor-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); margin-bottom: 5px; font-size: 13px; transition: all var(--t-fast); }
+  .tarea-editor-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 8px 10px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); margin-bottom: 5px; font-size: 13px; }
   .tarea-editor-row:hover { border-color: var(--border-2); }
-  .tarea-editor-row .flags { display: flex; gap: 2px; flex-wrap: wrap; }
-  .flag-badge { font-size: 12px; width: 26px; height: 26px; border-radius: 5px; cursor: pointer; user-select: none; border: 1px solid var(--border); background: var(--bg-3); color: var(--text-4); display: flex; align-items: center; justify-content: center; transition: all var(--t-fast); }
-  .flag-badge.on-prio { background: var(--blue-soft); color: var(--blue); border-color: rgba(97,168,255,0.4); }
-  .flag-badge.on-barra { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-glow); }
-  .flag-badge.on-doble { background: var(--green-soft); color: var(--green); border-color: rgba(94,225,136,0.4); }
-  .flag-badge.on-oblig { background: var(--red-soft); color: var(--red); border-color: rgba(255,77,109,0.4); }
-  .flag-badge.on-sem { background: var(--purple-soft); color: var(--purple); border-color: rgba(183,148,255,0.4); }
+  /* Grupo de insignias: las apagadas se ven en gris apagado; las activas, a color y con borde */
+  .tarea-editor-row .flags { display: flex; gap: 3px; padding: 3px; background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px; }
+  .flag-badge { font-size: 14px; width: 30px; height: 30px; border-radius: 6px; cursor: pointer; user-select: none; border: 1px solid transparent; background: transparent; color: var(--text-4); display: flex; align-items: center; justify-content: center; filter: grayscale(1); opacity: 0.35; }
+  .flag-badge:hover { opacity: 0.75; background: var(--bg-3); }
+  .flag-badge.on-prio { background: var(--blue-soft); color: var(--blue); border-color: rgba(97,168,255,0.55); filter: none; opacity: 1; }
+  .flag-badge.on-barra { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-glow); filter: none; opacity: 1; }
+  .flag-badge.on-doble { background: var(--green-soft); color: var(--green); border-color: rgba(94,225,136,0.55); filter: none; opacity: 1; }
+  .flag-badge.on-oblig { background: var(--red-soft); color: var(--red); border-color: rgba(255,77,109,0.55); filter: none; opacity: 1; }
+  .flag-badge.on-sem { background: var(--purple-soft); color: var(--purple); border-color: rgba(183,148,255,0.55); filter: none; opacity: 1; }
   .arrow-btn { background: var(--bg-3); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; padding: 0; width: 22px; height: 22px; color: var(--text-2); font-size: 10px; transition: all var(--t-fast); display: flex; align-items: center; justify-content: center; }
   .arrow-btn:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-glow); }
   .arrow-btn:disabled { opacity: 0.25; cursor: not-allowed; }
@@ -220,6 +222,9 @@
     .table-wrap { margin: 0 -16px; padding: 0 16px; }
     .btn { padding: 12px 16px; }
     .worker-pill { padding: 10px 16px; font-size: 14px; }
+    /* En móvil: nombre de la tarea a línea completa arriba, controles debajo */
+    .tarea-editor-row > .tarea-input, .tarea-editor-row > span { flex-basis: 100%; order: -1; }
+    .tarea-editor-row .del-btn { margin-left: auto; }
     h1 { font-size: clamp(36px, 11vw, 60px); }
     .card-title { font-size: 22px; }
     .semana-name { font-size: 24px; }
