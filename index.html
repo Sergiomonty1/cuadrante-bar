@@ -309,8 +309,8 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-  import { getFirestore, doc, onSnapshot, setDoc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+  import { getFirestore, doc, onSnapshot, setDoc, getDoc, runTransaction, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   const firebaseConfig = {
     apiKey: "AIzaSyAFH202bdANJWTaat8HYE7JsF5zT-LGyv8",
     authDomain: "cuadrante-bar.firebaseapp.com",
@@ -319,12 +319,10 @@
     messagingSenderId: "1027334561245",
     appId: "1:1027334561245:web:ae4e37a6a896b2fd676a34"
   };
-  const PASSWORD_EDITAR = "sabores1111";
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
-  window._fb = { auth, db, signInAnonymously, onAuthStateChanged, doc, onSnapshot, setDoc, getDoc, runTransaction };
-  window._passwords = { editar: PASSWORD_EDITAR };
+  window._fb = { auth, db, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut, doc, onSnapshot, setDoc, getDoc, runTransaction, deleteField };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
 
@@ -362,12 +360,17 @@ const TAREAS_DEFAULT = [
 const TAREA_RECARGAR_CAMARAS = { id: 'recargar_camaras', nombre: 'Recargar cámaras', deBarra: true };
 const PREFERENCIA_RESERVAS = ['Miguel', 'Sergio', 'Mireya', 'Alexandru'];
 
+// El admin es un usuario real de Firebase Auth; la clave ya no vive en el código
+const ADMIN_EMAIL = 'admin@saboresbar.app';
+
 let personas = [...PERSONAS_INICIALES];
 let tareas = JSON.parse(JSON.stringify(TAREAS_DEFAULT));
 let semanas = [];
 let historico = {};
+let checks = {}; // documento aparte: lo único que puede escribir el equipo sin ser admin
 let modoEditor = false;
 let docRef = null;
+let checksRef = null;
 let primerSync = true;
 let ultimaEscritura = 0;
 
@@ -408,23 +411,24 @@ function normalizar(data) {
 }
 
 // =============== ADMIN ===============
-function toggleAdmin() {
+async function toggleAdmin() {
   if (modoEditor) { salirAdmin(); return; }
   const c = prompt('Clave de administrador:');
-  if (c === window._passwords.editar) {
-    modoEditor = true;
-    sessionStorage.setItem('cuadrante_admin', '1');
-    aplicarModo();
-    render();
-  } else if (c !== null) {
+  if (c === null || c === '') return;
+  const { signInWithEmailAndPassword, auth } = window._fb;
+  try {
+    await signInWithEmailAndPassword(auth, ADMIN_EMAIL, c);
+    // onAuthStateChanged activa el modo editor
+  } catch (err) {
     alert('Clave incorrecta');
   }
 }
 function salirAdmin() {
   modoEditor = false;
-  sessionStorage.removeItem('cuadrante_admin');
   aplicarModo();
   render();
+  const { signOut, signInAnonymously, auth } = window._fb;
+  signOut(auth).catch(() => {}); // onAuthStateChanged vuelve a entrar como anónimo
 }
 function aplicarModo() {
   document.getElementById('adminBanner').style.display = modoEditor ? 'flex' : 'none';
@@ -440,22 +444,58 @@ function aplicarModo() {
 // =============== FIREBASE ===============
 window.addEventListener('firebase-ready', () => {
   const { auth, signInAnonymously, onAuthStateChanged, doc, db } = window._fb;
-  if (sessionStorage.getItem('cuadrante_admin') === '1') modoEditor = true;
   document.getElementById('mainContainer').style.display = 'block';
   aplicarModo();
   document.getElementById('connStatus').textContent = 'Conectando...';
-  signInAnonymously(auth).catch(() => {
-    document.getElementById('connStatus').textContent = 'Error de conexión';
-    document.getElementById('connStatus').className = 'status error';
-  });
   onAuthStateChanged(auth, (user) => {
-    if (user && !docRef) { docRef = doc(db, 'cuadrante', 'datos'); escucharCambios(); }
+    if (!user) {
+      // Primera visita o tras salir de admin: entrar como anónimo
+      signInAnonymously(auth).catch(() => {
+        document.getElementById('connStatus').textContent = 'Error de conexión';
+        document.getElementById('connStatus').className = 'status error';
+      });
+      return;
+    }
+    modoEditor = !user.isAnonymous; // la sesión de admin persiste entre recargas
+    aplicarModo();
+    if (!docRef) {
+      docRef = doc(db, 'cuadrante', 'datos');
+      checksRef = doc(db, 'cuadrante', 'checks');
+      escucharCambios();
+      escucharChecks();
+    }
+    render();
   });
 });
 
 function aplicarDatos(data) {
   normalizar(data);
   personas = data.personas; semanas = data.semanas; historico = data.historico; tareas = data.tareas;
+}
+
+// Los checks viven en cuadrante/checks (clave: "diaId|bloque|tareaId"), que cualquiera
+// del equipo puede escribir; la estructura (cuadrante/datos) solo la escribe el admin.
+function escucharChecks() {
+  const { onSnapshot } = window._fb;
+  onSnapshot(checksRef, (snap) => {
+    checks = snap.exists() ? snap.data() : {};
+    render();
+  }, () => {});
+}
+function estaHecha(did, bloque, tid, info) {
+  const k = did + '|' + bloque + '|' + tid;
+  if (k in checks) return !!checks[k];
+  return !!(info && info.checked); // compatibilidad con checks antiguos guardados en datos
+}
+// Al regenerar o borrar un día, sus checks dejan de tener sentido
+function limpiarChecksDia(did) {
+  if (!checksRef) return;
+  const claves = Object.keys(checks).filter(k => k.startsWith(did + '|'));
+  if (claves.length === 0) return;
+  const { setDoc, deleteField } = window._fb;
+  const upd = {};
+  claves.forEach(k => { upd[k] = deleteField(); delete checks[k]; });
+  setDoc(checksRef, upd, { merge: true }).catch(() => {});
 }
 
 function escucharCambios() {
@@ -590,6 +630,8 @@ function añadirSemana() {
 function eliminarSemana(sid) {
   if (!modoEditor) return;
   if (!confirm('¿Eliminar esta semana entera?')) return;
+  const sLoc = semanas.find(s => s.id === sid);
+  if (sLoc) sLoc.dias.forEach(d => limpiarChecksDia(d.id));
   mutar(data => {
     const idx = data.semanas.findIndex(s => s.id === sid);
     if (idx === -1) return false;
@@ -619,6 +661,7 @@ function añadirDia(sid) {
 }
 function eliminarDia(sid, did) {
   if (!modoEditor) return;
+  limpiarChecksDia(did);
   mutar(data => {
     const s = buscarSemana(data, sid); if (!s) return false;
     const idx = s.dias.findIndex(d => d.id === did);
@@ -656,7 +699,7 @@ function semanalesHechasEnSemana(semana, ts = tareas) {
     ['antes', 'despues'].forEach(bk => {
       Object.entries(d.asignaciones[bk] || {}).forEach(([tid, info]) => {
         const t = tareaPorId(tid, ts);
-        if (t && t.semanal && info.checked) hechas.add(tid);
+        if (t && t.semanal && estaHecha(d.id, bk, tid, info)) hechas.add(tid);
       });
     });
   });
@@ -800,6 +843,7 @@ function repartirDia(data, semana, dia) {
 
 function generarReparto(sid, did) {
   if (!modoEditor) return;
+  limpiarChecksDia(did); // los checks del reparto anterior ya no valen
   mutar(data => {
     const s = buscarSemana(data, sid);
     const d = buscarDia(s, did);
@@ -864,16 +908,19 @@ function desconfirmarDia(sid, did) {
 
 // =============== CHECK (permitido también sin admin) ===============
 function toggleCheck(sid, did, bloque, tareaId) {
+  if (!checksRef) return;
   const dLoc = buscarDia(buscarSemana({ semanas }, sid), did);
   const infoLoc = dLoc && dLoc.asignaciones && dLoc.asignaciones[bloque] && dLoc.asignaciones[bloque][tareaId];
   if (!infoLoc) return;
-  const objetivo = !infoLoc.checked;
-  mutar(data => {
-    const d = buscarDia(buscarSemana(data, sid), did);
-    const info = d && d.asignaciones && d.asignaciones[bloque] && d.asignaciones[bloque][tareaId];
-    if (!info) return false;
-    info.checked = objetivo;
-  });
+  const k = did + '|' + bloque + '|' + tareaId;
+  const objetivo = !estaHecha(did, bloque, tareaId, infoLoc);
+  checks[k] = objetivo; // respuesta inmediata en pantalla
+  ultimaEscritura = Date.now();
+  render();
+  const { setDoc } = window._fb;
+  setDoc(checksRef, { [k]: objetivo }, { merge: true })
+    .then(() => mostrarBadge('savedBadge'))
+    .catch(err => alert('No se pudo guardar el check: ' + err.message));
 }
 
 // =============== CAMBIAR / AÑADIR PERSONA ===============
@@ -1223,16 +1270,18 @@ function renderAsignaciones(semana, dia) {
     if (t.deBarra) {
       if (!a.barra) return '';
       const info = a[bk][t.id] || {};
+      const hechoB = estaHecha(did, bk, t.id, info);
       const quitarBtn = modoEditor ? `<button class="del-btn" onclick="quitarTareaDia(${aj(sid)}, ${aj(did)}, ${aj(bk)}, ${aj(t.id)})" title="Quitar de este día">✕</button>` : '';
-      return `<div class="tarea-row barra-row ${info.checked ? 'hecha' : ''}">
-        <div class="tarea-left">${checkBox(bk, t.id, info.checked)}<span class="tarea-nombre">🍺 ${esc(t.nombre)}</span></div>
+      return `<div class="tarea-row barra-row ${hechoB ? 'hecha' : ''}">
+        <div class="tarea-left">${checkBox(bk, t.id, hechoB)}<span class="tarea-nombre">🍺 ${esc(t.nombre)}</span></div>
         <div class="tarea-derecha">${renderPersona(a.barra, `abrirModalPersona(${aj(sid)}, ${aj(did)}, ${aj('barra')}, {})`)}${quitarBtn}</div></div>`;
     }
     const info = a[bk][t.id]; if (!info) return '';
+    const hecho = estaHecha(did, bk, t.id, info);
     let cls = 'tarea-row';
     if (t.prioritaria) cls += ' prioritaria';
     if (t.semanal) cls += ' semanal';
-    if (info.checked) cls += ' hecha';
+    if (hecho) cls += ' hecha';
     let pH = '';
     if (info.personas) {
       pH = info.personas.map((p, idx) => renderPersona(p.persona, `abrirModalPersona(${aj(sid)}, ${aj(did)}, ${aj('tarea')}, ${aj({ bloque: bk, tareaId: t.id, idxPersona: idx })})`)).join(' <span style="color:var(--text-4);">+</span> ');
@@ -1243,7 +1292,7 @@ function renderAsignaciones(semana, dia) {
     const quitarBtn = modoEditor ? `<button class="del-btn" onclick="quitarTareaDia(${aj(sid)}, ${aj(did)}, ${aj(bk)}, ${aj(t.id)})" title="Quitar de este día">✕</button>` : '';
     const est = t.prioritaria ? '<span class="estrella">⭐</span>' : (t.semanal ? '<span class="badge-sem">📅</span>' : '');
     return `<div class="${cls}">
-      <div class="tarea-left">${checkBox(bk, t.id, info.checked)}<span class="tarea-nombre">${est}${esc(t.nombre)}</span></div>
+      <div class="tarea-left">${checkBox(bk, t.id, hecho)}<span class="tarea-nombre">${est}${esc(t.nombre)}</span></div>
       <div class="tarea-derecha">${pH}${addBtn}${quitarBtn}</div></div>`;
   }).join('');
 
