@@ -190,6 +190,20 @@
   .modal-close { margin-top: 16px; width: 100%; padding: 11px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer; font-family: inherit; color: var(--text-2); }
   .modal-close:hover { background: var(--bg-3); color: var(--text); }
 
+  .cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .cal-titulo { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-2); }
+  .cal-nav { background: var(--bg-2); border: 1px solid var(--border); color: var(--text-2); border-radius: 6px; width: 34px; height: 34px; cursor: pointer; font-size: 16px; transition: all var(--t-fast); }
+  .cal-nav:hover { border-color: var(--accent); color: var(--accent); }
+  .cal-dias-head { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 4px; padding: 0 2px; }
+  .cal-dias-head span { font-family: var(--mono); font-size: 9px; text-transform: uppercase; color: var(--text-4); text-align: center; }
+  .cal-fila { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 4px 2px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; transition: all var(--t-fast); background: none; width: 100%; font-family: inherit; margin-bottom: 2px; }
+  .cal-fila:hover { background: var(--accent-soft); border-color: var(--accent-glow); }
+  .cal-fila span { text-align: center; font-size: 13px; padding: 7px 0; color: var(--text-2); }
+  .cal-fila span.fuera { color: var(--text-4); opacity: 0.5; }
+  .cal-fila span.hoy { color: var(--accent); font-weight: 700; }
+  .cal-fila.actual { border-color: var(--border-2); background: var(--bg-2); }
+  .cal-hint { font-size: 11px; color: var(--text-3); font-style: italic; text-align: center; margin-top: 10px; }
+
   .admin-banner { background: linear-gradient(90deg, var(--accent-soft), transparent); border: 1px solid var(--accent-glow); padding: 10px 16px; border-radius: var(--r-md); margin-bottom: 16px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--accent-2); }
   .admin-banner b { color: var(--accent); }
 
@@ -230,6 +244,21 @@
     <h3 id="modalTitle">Cambiar persona</h3>
     <div class="modal-options" id="modalOptions"></div>
     <button class="modal-close" onclick="cerrarModal()">Cancelar</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalCalendario">
+  <div class="modal-card">
+    <h3>¿Qué semana es?</h3>
+    <div class="cal-head">
+      <button class="cal-nav" onclick="calMoverMes(-1)">‹</button>
+      <div class="cal-titulo" id="calTitulo"></div>
+      <button class="cal-nav" onclick="calMoverMes(1)">›</button>
+    </div>
+    <div id="calGrid"></div>
+    <p class="cal-hint">Pulsa una fila para crear esa semana · luego añade los días</p>
+    <button class="btn-link" style="width:100%; margin-top:6px;" onclick="crearSemanaSinFecha()">Crear sin fecha (Semana 1, 2…)</button>
+    <button class="modal-close" onclick="cerrarCalendario()">Cancelar</button>
   </div>
 </div>
 
@@ -288,7 +317,7 @@
   <section>
     <div class="card-h" style="margin-bottom: 16px;">
       <div class="card-title"><span class="ic">◆</span>Semanas</div>
-      <button class="btn btn-primary" id="btnNuevaSemana" onclick="añadirSemana()">+ Nueva semana</button>
+      <button class="btn btn-primary" id="btnNuevaSemana" onclick="abrirModalCalendario()">+ Nueva semana</button>
     </div>
     <div id="semanasContainer"></div>
   </section>
@@ -644,6 +673,74 @@ function añadirSemana() {
     if (buscarSemana(data, id)) return false;
     data.semanas.unshift({ id, nombre: `Semana ${data.semanas.length + 1}`, dias: [] });
   });
+}
+
+// =============== CALENDARIO PARA ELEGIR SEMANA ===============
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+let calAño = 0, calMes = 0;
+
+function abrirModalCalendario() {
+  if (!modoEditor) return;
+  const hoy = new Date();
+  calAño = hoy.getFullYear();
+  calMes = hoy.getMonth();
+  renderCalendario();
+  document.getElementById('modalCalendario').classList.add('show');
+}
+function cerrarCalendario() { document.getElementById('modalCalendario').classList.remove('show'); }
+function calMoverMes(delta) {
+  calMes += delta;
+  if (calMes < 0) { calMes = 11; calAño--; }
+  if (calMes > 11) { calMes = 0; calAño++; }
+  renderCalendario();
+}
+function renderCalendario() {
+  document.getElementById('calTitulo').textContent = MESES[calMes] + ' ' + calAño;
+  const primero = new Date(calAño, calMes, 1);
+  const finMes = new Date(calAño, calMes + 1, 0);
+  // lunes de la semana donde cae el día 1
+  const lunes0 = new Date(primero);
+  lunes0.setDate(primero.getDate() - ((primero.getDay() + 6) % 7));
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  let html = '<div class="cal-dias-head">' + ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(d => `<span>${d}</span>`).join('') + '</div>';
+  for (let f = 0; f < 6; f++) {
+    const lunes = new Date(lunes0);
+    lunes.setDate(lunes0.getDate() + f * 7);
+    if (lunes > finMes) break; // esta semana ya cae entera en el mes siguiente
+    let celdas = '', esActual = false;
+    for (let i = 0; i < 7; i++) {
+      const dia = new Date(lunes);
+      dia.setDate(lunes.getDate() + i);
+      const clases = [];
+      if (dia.getMonth() !== calMes) clases.push('fuera');
+      if (dia.getTime() === hoy.getTime()) { clases.push('hoy'); esActual = true; }
+      celdas += `<span class="${clases.join(' ')}">${dia.getDate()}</span>`;
+    }
+    const iso = lunes.getFullYear() + '-' + String(lunes.getMonth() + 1).padStart(2, '0') + '-' + String(lunes.getDate()).padStart(2, '0');
+    html += `<button class="cal-fila ${esActual ? 'actual' : ''}" onclick="crearSemanaDesdeFecha(${aj(iso)})">${celdas}</button>`;
+  }
+  document.getElementById('calGrid').innerHTML = html;
+}
+function nombreSemanaDesde(lunes) {
+  const domingo = new Date(lunes);
+  domingo.setDate(lunes.getDate() + 6);
+  if (lunes.getMonth() === domingo.getMonth()) return `Semana ${lunes.getDate()}–${domingo.getDate()} ${MESES[lunes.getMonth()]}`;
+  return `Semana ${lunes.getDate()} ${MESES[lunes.getMonth()].slice(0, 3)} – ${domingo.getDate()} ${MESES[domingo.getMonth()].slice(0, 3)}`;
+}
+function crearSemanaDesdeFecha(iso) {
+  if (!modoEditor) return;
+  cerrarCalendario();
+  const [y, m, d] = iso.split('-').map(Number);
+  const nombre = nombreSemanaDesde(new Date(y, m - 1, d));
+  const id = 's' + Date.now();
+  mutar(data => {
+    if (buscarSemana(data, id)) return false;
+    data.semanas.unshift({ id, nombre, inicio: iso, dias: [] });
+  });
+}
+function crearSemanaSinFecha() {
+  cerrarCalendario();
+  añadirSemana();
 }
 function eliminarSemana(sid) {
   if (!modoEditor) return;
@@ -1384,13 +1481,15 @@ Object.assign(window, {
   actualizarNombreSemana, añadirDia, eliminarDia, toggleTrabajador, setBarra, generarReparto,
   confirmarDia, desconfirmarDia, copiarDia, resetearHistorico, resetearTodo, añadirTarea,
   eliminarTarea, moverTarea, toggleFlag, renombrarTarea, abrirModalPersona, cerrarModal,
-  aplicarCambioPersona, quitarPersona, toggleCheck, quitarTareaDia, abrirModalAñadirTareaDia, aplicarAñadirTareaDia
+  aplicarCambioPersona, quitarPersona, toggleCheck, quitarTareaDia, abrirModalAñadirTareaDia, aplicarAñadirTareaDia,
+  abrirModalCalendario, cerrarCalendario, calMoverMes, crearSemanaDesdeFecha, crearSemanaSinFecha
 });
 
 document.getElementById('nuevaPersona').addEventListener('keydown', e => { if (e.key === 'Enter') añadirPersona(); });
 document.getElementById('nuevaTareaAntes').addEventListener('keydown', e => { if (e.key === 'Enter') añadirTarea('antes'); });
 document.getElementById('nuevaTareaDespues').addEventListener('keydown', e => { if (e.key === 'Enter') añadirTarea('despues'); });
 document.getElementById('modalPersona').addEventListener('click', e => { if (e.target.id === 'modalPersona') cerrarModal(); });
+document.getElementById('modalCalendario').addEventListener('click', e => { if (e.target.id === 'modalCalendario') cerrarCalendario(); });
 </script>
 </body>
 </html>
