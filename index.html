@@ -112,12 +112,7 @@
   .tarea-row.barra-row { background: linear-gradient(90deg, var(--accent-soft), transparent); border-color: var(--accent-glow); }
   .tarea-row.prioritaria { background: linear-gradient(90deg, var(--blue-soft), transparent); border-color: rgba(97,168,255,0.3); }
   .tarea-row.semanal { background: linear-gradient(90deg, var(--purple-soft), transparent); border-color: rgba(183,148,255,0.3); }
-  .tarea-row.hecha { opacity: 0.55; }
-  .tarea-row.hecha .tarea-nombre { text-decoration: line-through; color: var(--text-3); }
   .tarea-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-  .tarea-check { width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--border-2); background: var(--bg-3); cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all var(--t-fast); color: transparent; font-size: 13px; }
-  .tarea-check:hover { border-color: var(--green); }
-  .tarea-check.checked { background: var(--green); border-color: var(--green); color: #052b14; }
   .tarea-nombre { color: var(--text); min-width: 0; }
   .tarea-derecha { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .tarea-persona { font-weight: 600; color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all var(--t-fast); border: 1px dashed transparent; font-size: 13px; }
@@ -337,7 +332,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
   import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, onSnapshot, setDoc, getDoc, runTransaction, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, onSnapshot, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   const firebaseConfig = {
     apiKey: "AIzaSyAFH202bdANJWTaat8HYE7JsF5zT-LGyv8",
     authDomain: "cuadrante-bar.firebaseapp.com",
@@ -349,14 +344,14 @@
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   // Caché persistente: la web abre al instante con los últimos datos guardados
-  // y se sincroniza por detrás; los checks funcionan incluso sin conexión
+  // y se sincroniza por detrás
   let db;
   try {
     db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
   } catch (e) {
     db = getFirestore(app);
   }
-  window._fb = { auth, db, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut, doc, onSnapshot, setDoc, getDoc, runTransaction, deleteField };
+  window._fb = { auth, db, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut, doc, onSnapshot, getDoc, runTransaction };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
 
@@ -401,10 +396,8 @@ let personas = [...PERSONAS_INICIALES];
 let tareas = JSON.parse(JSON.stringify(TAREAS_DEFAULT));
 let semanas = [];
 let historico = {};
-let checks = {}; // documento aparte: lo único que puede escribir el equipo sin ser admin
 let modoEditor = false;
 let docRef = null;
-let checksRef = null;
 let primerSync = true;
 let ultimaEscritura = 0;
 
@@ -494,9 +487,7 @@ window.addEventListener('firebase-ready', () => {
     aplicarModo();
     if (!docRef) {
       docRef = doc(db, 'cuadrante', 'datos');
-      checksRef = doc(db, 'cuadrante', 'checks');
       escucharCambios();
-      escucharChecks();
     }
     render();
   });
@@ -506,32 +497,6 @@ function aplicarDatos(data) {
   normalizar(data);
   personas = data.personas; semanas = data.semanas; historico = data.historico; tareas = data.tareas;
 }
-
-// Los checks viven en cuadrante/checks (clave: "diaId|bloque|tareaId"), que cualquiera
-// del equipo puede escribir; la estructura (cuadrante/datos) solo la escribe el admin.
-function escucharChecks() {
-  const { onSnapshot } = window._fb;
-  onSnapshot(checksRef, (snap) => {
-    checks = snap.exists() ? snap.data() : {};
-    render();
-  }, () => {});
-}
-function estaHecha(did, bloque, tid, info) {
-  const k = did + '|' + bloque + '|' + tid;
-  if (k in checks) return !!checks[k];
-  return !!(info && info.checked); // compatibilidad con checks antiguos guardados en datos
-}
-// Al regenerar o borrar un día, sus checks dejan de tener sentido
-function limpiarChecksDia(did) {
-  if (!checksRef) return;
-  const claves = Object.keys(checks).filter(k => k.startsWith(did + '|'));
-  if (claves.length === 0) return;
-  const { setDoc, deleteField } = window._fb;
-  const upd = {};
-  claves.forEach(k => { upd[k] = deleteField(); delete checks[k]; });
-  setDoc(checksRef, upd, { merge: true }).catch(() => {});
-}
-
 function escucharCambios() {
   const { onSnapshot } = window._fb;
   onSnapshot(docRef, { includeMetadataChanges: true }, (snap) => {
@@ -740,8 +705,6 @@ function crearSemanaSinFecha() {
 function eliminarSemana(sid) {
   if (!modoEditor) return;
   if (!confirm('¿Eliminar esta semana entera?')) return;
-  const sLoc = semanas.find(s => s.id === sid);
-  if (sLoc) sLoc.dias.forEach(d => limpiarChecksDia(d.id));
   mutar(data => {
     const idx = data.semanas.findIndex(s => s.id === sid);
     if (idx === -1) return false;
@@ -771,7 +734,6 @@ function añadirDia(sid) {
 }
 function eliminarDia(sid, did) {
   if (!modoEditor) return;
-  limpiarChecksDia(did);
   mutar(data => {
     const s = buscarSemana(data, sid); if (!s) return false;
     const idx = s.dias.findIndex(d => d.id === did);
@@ -800,20 +762,20 @@ function setBarra(sid, did, p) {
   });
 }
 
-// =============== TAREAS SEMANALES: cuáles tocan ===============
-// Set de ids de tareas semanales YA hechas (check marcado) en esta semana
-function semanalesHechasEnSemana(semana, ts = tareas) {
-  const hechas = new Set();
+// =============== TAREAS SEMANALES ===============
+// Set de ids de tareas semanales ya puestas en algún día de esta semana
+function semanalesPuestasEnSemana(semana, ts = tareas) {
+  const puestas = new Set();
   semana.dias.forEach(d => {
     if (!d.asignaciones) return;
     ['antes', 'despues'].forEach(bk => {
-      Object.entries(d.asignaciones[bk] || {}).forEach(([tid, info]) => {
+      Object.keys(d.asignaciones[bk] || {}).forEach(tid => {
         const t = tareaPorId(tid, ts);
-        if (t && t.semanal && estaHecha(d.id, bk, tid, info)) hechas.add(tid);
+        if (t && t.semanal) puestas.add(tid);
       });
     });
   });
-  return hechas;
+  return puestas;
 }
 // =============== ALGORITMO DE REPARTO ===============
 function elegirReservas(noBarra, histTemp) {
@@ -879,7 +841,7 @@ function repartirDia(data, dia) {
     }
     if (!res || !res.persona) res = elegirPersona(tarea, [], tarea.bloque);
     if (!res || !res.persona) return;
-    asignaciones[tarea.bloque][tarea.id] = { persona: res.persona, checked: false };
+    asignaciones[tarea.bloque][tarea.id] = { persona: res.persona };
     if (res.esBarra) barraExtra[tarea.bloque]++;
     if (!histTemp[res.persona]) histTemp[res.persona] = {};
     histTemp[res.persona][tarea.id] = (histTemp[res.persona][tarea.id] || 0) + 1;
@@ -904,16 +866,16 @@ function repartirDia(data, dia) {
         if (!histTemp[res.persona]) histTemp[res.persona] = {};
         histTemp[res.persona][tarea.id] = (histTemp[res.persona][tarea.id] || 0) + 1;
       }
-      if (numP > 1) asignaciones[bloqueKey][tarea.id] = { personas: elegidos, checked: false };
-      else if (elegidos.length === 1) asignaciones[bloqueKey][tarea.id] = { persona: elegidos[0].persona, checked: false };
+      if (numP > 1) asignaciones[bloqueKey][tarea.id] = { personas: elegidos };
+      else if (elegidos.length === 1) asignaciones[bloqueKey][tarea.id] = { persona: elegidos[0].persona };
     });
   }
   asignarBloque('antes');
   asignarBloque('despues');
-  // Entradas para las tareas deBarra (asignadas a la persona de barra) para que tengan check
+  // Entradas para las tareas deBarra, asignadas a la persona de barra
   if (asignaciones.barra) {
     data.tareas.filter(tk => tk.deBarra).forEach(tk => {
-      asignaciones[tk.bloque][tk.id] = { persona: asignaciones.barra, checked: false, esBarra: true };
+      asignaciones[tk.bloque][tk.id] = { persona: asignaciones.barra, esBarra: true };
     });
   }
   return asignaciones;
@@ -921,7 +883,6 @@ function repartirDia(data, dia) {
 
 function generarReparto(sid, did) {
   if (!modoEditor) return;
-  limpiarChecksDia(did); // los checks del reparto anterior ya no valen
   mutar(data => {
     const d = buscarDia(buscarSemana(data, sid), did);
     if (!d || !d.trabajadores || d.trabajadores.length === 0) return false;
@@ -981,23 +942,6 @@ function desconfirmarDia(sid, did) {
     restarHistoricoDia(data, d);
     d.confirmado = false;
   });
-}
-
-// =============== CHECK (permitido también sin admin) ===============
-function toggleCheck(sid, did, bloque, tareaId) {
-  if (!checksRef) return;
-  const dLoc = buscarDia(buscarSemana({ semanas }, sid), did);
-  const infoLoc = dLoc && dLoc.asignaciones && dLoc.asignaciones[bloque] && dLoc.asignaciones[bloque][tareaId];
-  if (!infoLoc) return;
-  const k = did + '|' + bloque + '|' + tareaId;
-  const objetivo = !estaHecha(did, bloque, tareaId, infoLoc);
-  checks[k] = objetivo; // respuesta inmediata en pantalla
-  ultimaEscritura = Date.now();
-  render();
-  const { setDoc } = window._fb;
-  setDoc(checksRef, { [k]: objetivo }, { merge: true })
-    .then(() => mostrarBadge('savedBadge'))
-    .catch(err => alert('No se pudo guardar el check: ' + err.message));
 }
 
 // =============== CAMBIAR / AÑADIR PERSONA ===============
@@ -1073,7 +1017,7 @@ function aplicarCambioPersona(sid, did, tipo, params, nuevaPersona) {
           lista.push({ persona: nuevaPersona });
           if (confirmado) { if (!data.historico[nuevaPersona]) data.historico[nuevaPersona] = {}; data.historico[nuevaPersona][params.tareaId] = (data.historico[nuevaPersona][params.tareaId] || 0) + 1; }
         }
-        a[params.bloque][params.tareaId] = { personas: lista, checked: info.checked || false };
+        a[params.bloque][params.tareaId] = { personas: lista };
       } else {
         let ant;
         if (info.personas) {
@@ -1105,7 +1049,7 @@ function quitarPersona(sid, did, params) {
     info.personas.splice(params.idxPersona, 1);
     if (d.confirmado && data.historico[quitada] && data.historico[quitada][params.tareaId]) data.historico[quitada][params.tareaId] = Math.max(0, data.historico[quitada][params.tareaId] - 1);
     // si queda solo una, volver a formato simple
-    if (info.personas.length === 1) d.asignaciones[params.bloque][params.tareaId] = { persona: info.personas[0].persona, checked: info.checked || false };
+    if (info.personas.length === 1) d.asignaciones[params.bloque][params.tareaId] = { persona: info.personas[0].persona };
   });
 }
 
@@ -1151,7 +1095,7 @@ function aplicarAñadirTareaDia(sid, did, bloque, tareaId) {
   mutar(data => {
     const d = buscarDia(buscarSemana(data, sid), did);
     if (!d || !d.asignaciones) return false;
-    d.asignaciones[bloque][tareaId] = { persona: null, checked: false };
+    d.asignaciones[bloque][tareaId] = { persona: null };
   });
 }
 
@@ -1288,7 +1232,7 @@ function render() {
   requestAnimationFrame(() => { renderProgramado = false; renderAhora(); });
 }
 function renderAhora() {
-  const estado = JSON.stringify([personas, semanas, historico, tareas, checks, modoEditor]);
+  const estado = JSON.stringify([personas, semanas, historico, tareas, modoEditor]);
   if (estado === ultimoEstadoRender) return;
   ultimoEstadoRender = estado;
   // Conservar el foco, lo escrito y los desplegables al repintar (los cambios en
@@ -1334,9 +1278,9 @@ function renderSemana(semana) {
       <select id="turnoSelect_${esc(sid)}">${TURNOS_TIPO.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
       <button class="btn btn-ghost" onclick="añadirDia(${aj(sid)})">+ Añadir día</button>
     </div>` : '';
-  const hechas = semanalesHechasEnSemana(semana);
+  const puestas = semanalesPuestasEnSemana(semana);
   const totalSem = tareasSemanales().length;
-  const semStatus = totalSem > 0 ? `<span class="dia-tag" style="background:var(--purple-soft); color:var(--purple);">📅 ${hechas.size}/${totalSem} semanales hechas</span>` : '';
+  const semStatus = totalSem > 0 ? `<span class="dia-tag" style="background:var(--purple-soft); color:var(--purple);">📅 ${puestas.size}/${totalSem} semanales puestas</span>` : '';
   return `
     <div class="semana-block">
       <div class="semana-head">
@@ -1394,24 +1338,18 @@ function renderAsignaciones(semana, dia) {
     const extra = persona ? '' : ' sin-asignar';
     return `<span class="tarea-persona ${ed}${extra}" ${click}>${persona ? esc(persona) : 'Sin asignar'}</span>`;
   };
-  const checkBox = (bloque, tareaId, checked) => `<div class="tarea-check ${checked ? 'checked' : ''}" onclick="toggleCheck(${aj(sid)}, ${aj(did)}, ${aj(bloque)}, ${aj(tareaId)})">${checked ? '✓' : ''}</div>`;
-
   const tareaHTML = (arr, bk) => arr.map(t => {
     if (t.deBarra) {
       if (!a.barra) return '';
-      const info = a[bk][t.id] || {};
-      const hechoB = estaHecha(did, bk, t.id, info);
       const quitarBtn = modoEditor ? `<button class="del-btn" onclick="quitarTareaDia(${aj(sid)}, ${aj(did)}, ${aj(bk)}, ${aj(t.id)})" title="Quitar de este día">✕</button>` : '';
-      return `<div class="tarea-row barra-row ${hechoB ? 'hecha' : ''}">
-        <div class="tarea-left">${checkBox(bk, t.id, hechoB)}<span class="tarea-nombre">🍺 ${esc(t.nombre)}</span></div>
+      return `<div class="tarea-row barra-row">
+        <div class="tarea-left"><span class="tarea-nombre">🍺 ${esc(t.nombre)}</span></div>
         <div class="tarea-derecha">${renderPersona(a.barra, `abrirModalPersona(${aj(sid)}, ${aj(did)}, ${aj('barra')}, {})`)}${quitarBtn}</div></div>`;
     }
     const info = a[bk][t.id]; if (!info) return '';
-    const hecho = estaHecha(did, bk, t.id, info);
     let cls = 'tarea-row';
     if (t.prioritaria) cls += ' prioritaria';
     if (t.semanal) cls += ' semanal';
-    if (hecho) cls += ' hecha';
     let pH = '';
     if (info.personas) {
       pH = info.personas.map((p, idx) => renderPersona(p.persona, `abrirModalPersona(${aj(sid)}, ${aj(did)}, ${aj('tarea')}, ${aj({ bloque: bk, tareaId: t.id, idxPersona: idx })})`)).join(' <span style="color:var(--text-4);">+</span> ');
@@ -1422,7 +1360,7 @@ function renderAsignaciones(semana, dia) {
     const quitarBtn = modoEditor ? `<button class="del-btn" onclick="quitarTareaDia(${aj(sid)}, ${aj(did)}, ${aj(bk)}, ${aj(t.id)})" title="Quitar de este día">✕</button>` : '';
     const est = t.prioritaria ? '<span class="estrella">⭐</span>' : (t.semanal ? '<span class="badge-sem">📅</span>' : '');
     return `<div class="${cls}">
-      <div class="tarea-left">${checkBox(bk, t.id, hecho)}<span class="tarea-nombre">${est}${esc(t.nombre)}</span></div>
+      <div class="tarea-left"><span class="tarea-nombre">${est}${esc(t.nombre)}</span></div>
       <div class="tarea-derecha">${pH}${addBtn}${quitarBtn}</div></div>`;
   }).join('');
 
@@ -1433,7 +1371,7 @@ function renderAsignaciones(semana, dia) {
     ? `<button class="btn btn-ghost" onclick="desconfirmarDia(${aj(sid)}, ${aj(did)})">↺ Deshacer</button>`
     : `<button class="btn btn-green" onclick="confirmarDia(${aj(sid)}, ${aj(did)})">✓ Confirmar y guardar</button>`) : '';
   const cb = `<button class="btn btn-whatsapp" onclick="copiarDia(${aj(sid)}, ${aj(did)})">📋 Copiar para WhatsApp</button>`;
-  const ayuda = modoEditor ? '<p class="hint">✦ Pulsa un nombre para cambiarlo · pulsa + para añadir ayuda · marca el check al terminar</p>' : '<p class="hint">✓ Marca cada tarea cuando la termines</p>';
+  const ayuda = modoEditor ? '<p class="hint">✦ Pulsa un nombre para cambiarlo · pulsa + para añadir ayuda</p>' : '';
   const addAntes = modoEditor ? `<button class="btn btn-ghost btn-icon" style="margin-top:6px; width:100%;" onclick="abrirModalAñadirTareaDia(${aj(sid)}, ${aj(did)}, ${aj('antes')})">+ Añadir tarea a este día</button>` : '';
   const addDespues = modoEditor ? `<button class="btn btn-ghost btn-icon" style="margin-top:6px; width:100%;" onclick="abrirModalAñadirTareaDia(${aj(sid)}, ${aj(did)}, ${aj('despues')})">+ Añadir tarea a este día</button>` : '';
   return `<div class="asignaciones">${bH}
@@ -1485,7 +1423,7 @@ Object.assign(window, {
   actualizarNombreSemana, añadirDia, eliminarDia, toggleTrabajador, setBarra, generarReparto,
   confirmarDia, desconfirmarDia, copiarDia, resetearHistorico, resetearTodo, añadirTarea,
   eliminarTarea, moverTarea, toggleFlag, renombrarTarea, abrirModalPersona, cerrarModal,
-  aplicarCambioPersona, quitarPersona, toggleCheck, quitarTareaDia, abrirModalAñadirTareaDia, aplicarAñadirTareaDia,
+  aplicarCambioPersona, quitarPersona, quitarTareaDia, abrirModalAñadirTareaDia, aplicarAñadirTareaDia,
   abrirModalCalendario, cerrarCalendario, calMoverMes, crearSemanaDesdeFecha, crearSemanaSinFecha, cuadrarPersonas
 });
 
