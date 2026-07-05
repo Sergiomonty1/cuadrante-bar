@@ -310,7 +310,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-  import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, doc, onSnapshot, setDoc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   const firebaseConfig = {
     apiKey: "AIzaSyAFH202bdANJWTaat8HYE7JsF5zT-LGyv8",
     authDomain: "cuadrante-bar.firebaseapp.com",
@@ -323,7 +323,7 @@
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
-  window._fb = { auth, db, signInAnonymously, onAuthStateChanged, doc, onSnapshot, setDoc };
+  window._fb = { auth, db, signInAnonymously, onAuthStateChanged, doc, onSnapshot, setDoc, getDoc, runTransaction };
   window._passwords = { editar: PASSWORD_EDITAR };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
@@ -369,11 +369,43 @@ let historico = {};
 let modoEditor = false;
 let docRef = null;
 let primerSync = true;
+let ultimaEscritura = 0;
 
-function tareasAntes() { return tareas.filter(t => t.bloque === 'antes'); }
-function tareasDespues() { return tareas.filter(t => t.bloque === 'despues'); }
-function tareasSemanales() { return tareas.filter(t => t.semanal); }
-function tareaPorId(id) { return tareas.find(t => t.id === id); }
+function tareasAntes(ts = tareas) { return ts.filter(t => t.bloque === 'antes'); }
+function tareasDespues(ts = tareas) { return ts.filter(t => t.bloque === 'despues'); }
+function tareasSemanales(ts = tareas) { return ts.filter(t => t.semanal); }
+function tareaPorId(id, ts = tareas) { return ts.find(t => t.id === id); }
+function buscarSemana(data, sid) { return data.semanas.find(s => s.id === sid); }
+function buscarDia(semana, did) { return semana ? semana.dias.find(d => d.id === did) : null; }
+
+function contar(persona, tareaId, hist = historico) { return (hist[persona] && hist[persona][tareaId]) || 0; }
+function contarTotal(persona, hist = historico) {
+  if (!hist[persona]) return 0;
+  return Object.entries(hist[persona]).filter(([k]) => k !== 'barra_count').reduce((a, [, v]) => a + v, 0);
+}
+function contarBarra(persona, hist = historico) { return (hist[persona] && hist[persona]['barra_count']) || 0; }
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Valor JS seguro para incrustar en un atributo onclick (soporta comillas, apóstrofes, objetos)
+function aj(v) { return esc(JSON.stringify(v)); }
+
+// Garantiza que los datos (del servidor o locales) tienen la forma esperada
+function normalizar(data) {
+  if (!Array.isArray(data.personas)) data.personas = [...PERSONAS_INICIALES];
+  if (!Array.isArray(data.semanas)) data.semanas = [];
+  if (!data.historico || typeof data.historico !== 'object') data.historico = {};
+  if (!Array.isArray(data.tareas) || data.tareas.length === 0) data.tareas = JSON.parse(JSON.stringify(TAREAS_DEFAULT));
+  else TAREAS_DEFAULT.forEach(def => { if (!data.tareas.find(t => t.id === def.id)) data.tareas.push(JSON.parse(JSON.stringify(def))); });
+  data.semanas.forEach((s, i) => {
+    if (!s.id) s.id = 'sIdx' + i;
+    if (!Array.isArray(s.dias)) s.dias = [];
+    s.dias.forEach((d, j) => {
+      if (!d.id) d.id = 'dIdx' + i + '_' + j;
+      if (!Array.isArray(d.trabajadores)) d.trabajadores = [];
+    });
+  });
+  return data;
+}
 
 // =============== ADMIN ===============
 function toggleAdmin() {
@@ -412,55 +444,80 @@ window.addEventListener('firebase-ready', () => {
   document.getElementById('mainContainer').style.display = 'block';
   aplicarModo();
   document.getElementById('connStatus').textContent = 'Conectando...';
-  signInAnonymously(auth).catch(err => {
+  signInAnonymously(auth).catch(() => {
     document.getElementById('connStatus').textContent = 'Error de conexión';
     document.getElementById('connStatus').className = 'status error';
   });
   onAuthStateChanged(auth, (user) => {
-    if (user) { docRef = doc(db, 'cuadrante', 'datos'); escucharCambios(); }
+    if (user && !docRef) { docRef = doc(db, 'cuadrante', 'datos'); escucharCambios(); }
   });
 });
+
+function aplicarDatos(data) {
+  normalizar(data);
+  personas = data.personas; semanas = data.semanas; historico = data.historico; tareas = data.tareas;
+}
 
 function escucharCambios() {
   const { onSnapshot } = window._fb;
   onSnapshot(docRef, (snap) => {
-    if (snap.exists()) {
-      const data = snap.data();
-      personas = data.personas || [...PERSONAS_INICIALES];
-      semanas = data.semanas || [];
-      historico = data.historico || {};
-      if (data.tareas && Array.isArray(data.tareas) && data.tareas.length > 0) {
-        tareas = data.tareas;
-        // Asegurar que las tareas nuevas por defecto que no existan se añadan (ej: semanales nuevas)
-        TAREAS_DEFAULT.forEach(def => {
-          if (!tareas.find(t => t.id === def.id)) {
-            tareas.push(JSON.parse(JSON.stringify(def)));
-          }
-        });
-      }
-    }
     document.getElementById('connStatus').textContent = 'Conectado · tiempo real';
     document.getElementById('connStatus').className = 'status connected';
-    if (primerSync) { primerSync = false; render(); }
-    else { render(); mostrarBadge('savedBadge'); }
+    // Si hay escrituras propias en vuelo, no pisar el estado optimista local;
+    // al vaciarse la cola se hace una relectura final que trae la verdad del servidor.
+    if (escriturasPendientes > 0) return;
+    if (snap.exists()) aplicarDatos(snap.data());
+    render();
+    if (!primerSync && Date.now() - ultimaEscritura < 4000) mostrarBadge('savedBadge');
+    primerSync = false;
   }, (err) => {
     document.getElementById('connStatus').textContent = 'Error: ' + err.message;
     document.getElementById('connStatus').className = 'status error';
   });
 }
 
-async function guardar() {
-  if (!docRef || !modoEditor) return;
-  const { setDoc } = window._fb;
-  try { await setDoc(docRef, { personas, semanas, historico, tareas, updatedAt: Date.now() }); }
-  catch (err) { alert('Error al guardar: ' + err.message); }
-}
-// Guardar permitido también para checks desde modo normal
-async function guardarCheck() {
+// Núcleo de guardado seguro: cada cambio se aplica sobre los datos FRESCOS del servidor
+// dentro de una transacción, en vez de sobreescribir el documento con el estado local.
+// Las escrituras propias se encolan para que lleguen al servidor en el mismo orden
+// en que se hicieron los clics (transacciones concurrentes pueden reordenarse).
+// fn(data) muta data; si devuelve false, se cancela. fn debe poder ejecutarse varias veces.
+let colaEscritura = Promise.resolve();
+let escriturasPendientes = 0;
+
+function mutar(fn) {
   if (!docRef) return;
-  const { setDoc } = window._fb;
-  try { await setDoc(docRef, { personas, semanas, historico, tareas, updatedAt: Date.now() }); }
-  catch (err) { console.error(err); }
+  // Aplicar en local primero para respuesta inmediata en pantalla
+  const local = { personas, semanas, historico, tareas };
+  let resLocal;
+  try { resLocal = fn(local); } catch (e) { console.error(e); resLocal = false; }
+  if (resLocal === false) return;
+  personas = local.personas; semanas = local.semanas; historico = local.historico; tareas = local.tareas;
+  ultimaEscritura = Date.now();
+  render();
+  escriturasPendientes++;
+  const { runTransaction, getDoc, db } = window._fb;
+  colaEscritura = colaEscritura.then(async () => {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      const data = snap.exists() ? snap.data() : {};
+      normalizar(data);
+      if (fn(data) === false) return;
+      tx.set(docRef, { personas: data.personas, semanas: data.semanas, historico: data.historico, tareas: data.tareas, updatedAt: Date.now() });
+    });
+  }).catch((err) => {
+    console.error('Error al guardar:', err);
+    if (escriturasPendientes <= 1) alert('No se pudo guardar: ' + err.message);
+  }).finally(async () => {
+    escriturasPendientes = Math.max(0, escriturasPendientes - 1);
+    ultimaEscritura = Date.now();
+    if (escriturasPendientes === 0) {
+      // Relectura final: asegura que lo que se ve coincide con el servidor
+      try {
+        const s = await getDoc(docRef);
+        if (escriturasPendientes === 0 && s.exists()) { aplicarDatos(s.data()); render(); mostrarBadge('savedBadge'); }
+      } catch (e) {}
+    }
+  });
 }
 
 function mostrarBadge(id) {
@@ -470,15 +527,6 @@ function mostrarBadge(id) {
   window['_t_' + id] = setTimeout(() => b.classList.remove('show'), 1800);
 }
 
-function contar(persona, tareaId, hist = historico) { return (hist[persona] && hist[persona][tareaId]) || 0; }
-function contarTotal(persona, hist = historico) {
-  if (!hist[persona]) return 0;
-  return Object.entries(hist[persona]).filter(([k]) => k !== 'barra_count').reduce((a, [, v]) => a + v, 0);
-}
-function contarBarra(persona, hist = historico) { return (hist[persona] && hist[persona]['barra_count']) || 0; }
-
-function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
 // =============== EDITOR DE TAREAS ===============
 function añadirTarea(bloque) {
   if (!modoEditor) return;
@@ -487,121 +535,142 @@ function añadirTarea(bloque) {
   if (!nombre) return;
   let baseId = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
   if (!baseId) baseId = 'tarea_' + Date.now();
-  let id = baseId, n = 1;
-  while (tareas.find(t => t.id === id)) { id = baseId + '_' + (n++); }
-  tareas.push({ id, nombre, bloque, obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false });
   inp.value = '';
-  guardar();
+  mutar(data => {
+    let id = baseId, n = 1;
+    while (data.tareas.find(t => t.id === id)) { id = baseId + '_' + (n++); }
+    data.tareas.push({ id, nombre, bloque, obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false });
+  });
 }
 function eliminarTarea(id) {
   if (!modoEditor) return;
   if (!confirm('¿Eliminar esta tarea?')) return;
-  tareas = tareas.filter(t => t.id !== id);
-  guardar();
+  mutar(data => { data.tareas = data.tareas.filter(t => t.id !== id); });
 }
 function moverTarea(id, dir) {
   if (!modoEditor) return;
-  const t = tareaPorId(id); if (!t) return;
-  const delBloque = tareas.filter(x => x.bloque === t.bloque);
-  const idx = delBloque.findIndex(x => x.id === id);
-  if (dir === 'up' && idx === 0) return;
-  if (dir === 'down' && idx === delBloque.length - 1) return;
-  const ig = tareas.findIndex(x => x.id === id);
-  const otroId = delBloque[dir === 'up' ? idx - 1 : idx + 1].id;
-  const og = tareas.findIndex(x => x.id === otroId);
-  [tareas[ig], tareas[og]] = [tareas[og], tareas[ig]];
-  guardar();
+  mutar(data => {
+    const t = tareaPorId(id, data.tareas); if (!t) return false;
+    const delBloque = data.tareas.filter(x => x.bloque === t.bloque);
+    const idx = delBloque.findIndex(x => x.id === id);
+    if (dir === 'up' && idx === 0) return false;
+    if (dir === 'down' && idx === delBloque.length - 1) return false;
+    const ig = data.tareas.findIndex(x => x.id === id);
+    const otroId = delBloque[dir === 'up' ? idx - 1 : idx + 1].id;
+    const og = data.tareas.findIndex(x => x.id === otroId);
+    [data.tareas[ig], data.tareas[og]] = [data.tareas[og], data.tareas[ig]];
+  });
 }
 function toggleFlag(id, flag) {
   if (!modoEditor) return;
-  const t = tareaPorId(id); if (!t) return;
-  t[flag] = !t[flag];
-  // semanal y obligatoria/diaria son excluyentes conceptualmente; si marca semanal, quita obligatoria
-  if (flag === 'semanal' && t.semanal) t.obligatoria = false;
-  guardar();
+  mutar(data => {
+    const t = tareaPorId(id, data.tareas); if (!t) return false;
+    t[flag] = !t[flag];
+    // semanal y obligatoria/diaria son excluyentes; si marca semanal, quita obligatoria
+    if (flag === 'semanal' && t.semanal) t.obligatoria = false;
+  });
 }
 function renombrarTarea(id, nuevo) {
-  if (!modoEditor) return;
-  const t = tareaPorId(id); if (!t || !nuevo.trim()) return;
-  t.nombre = nuevo.trim();
-  guardar();
+  if (!modoEditor || !nuevo.trim()) return;
+  mutar(data => {
+    const t = tareaPorId(id, data.tareas); if (!t) return false;
+    t.nombre = nuevo.trim();
+  });
 }
 
 // =============== SEMANAS Y DÍAS ===============
 function añadirSemana() {
   if (!modoEditor) return;
-  const num = semanas.length + 1;
-  semanas.unshift({ id: 's' + Date.now(), nombre: `Semana ${num}`, dias: [] });
-  guardar();
+  const id = 's' + Date.now();
+  mutar(data => {
+    if (buscarSemana(data, id)) return false;
+    data.semanas.unshift({ id, nombre: `Semana ${data.semanas.length + 1}`, dias: [] });
+  });
 }
-function eliminarSemana(si) {
+function eliminarSemana(sid) {
   if (!modoEditor) return;
   if (!confirm('¿Eliminar esta semana entera?')) return;
-  // desconfirmar días para revertir histórico
-  semanas[si].dias.forEach((d, di) => { if (d.confirmado) desconfirmarDia(si, di); });
-  semanas.splice(si, 1);
-  guardar();
-}
-function actualizarNombreSemana(si, nombre) { if (!modoEditor) return; semanas[si].nombre = nombre; guardar(); }
-
-function añadirDia(si) {
-  if (!modoEditor) return;
-  const diaSel = document.getElementById('diaSelect_' + si).value;
-  const turnoSel = document.getElementById('turnoSelect_' + si).value;
-  semanas[si].dias.push({
-    id: 'd' + Date.now(), dia: diaSel, turno: turnoSel,
-    trabajadores: [], personaBarra: null, asignaciones: null, confirmado: false
+  mutar(data => {
+    const idx = data.semanas.findIndex(s => s.id === sid);
+    if (idx === -1) return false;
+    data.semanas[idx].dias.forEach(d => { if (d.confirmado) restarHistoricoDia(data, d); });
+    data.semanas.splice(idx, 1);
   });
-  guardar();
 }
-function eliminarDia(si, di) {
+function actualizarNombreSemana(sid, nombre) {
   if (!modoEditor) return;
-  if (semanas[si].dias[di].confirmado) desconfirmarDia(si, di);
-  semanas[si].dias.splice(di, 1);
-  guardar();
+  mutar(data => {
+    const s = buscarSemana(data, sid); if (!s) return false;
+    s.nombre = nombre;
+  });
 }
-function toggleTrabajador(si, di, p) {
+
+function añadirDia(sid) {
   if (!modoEditor) return;
-  const d = semanas[si].dias[di];
-  if (d.confirmado) return;
-  if (d.trabajadores.includes(p)) { d.trabajadores = d.trabajadores.filter(x => x !== p); if (d.personaBarra === p) d.personaBarra = null; }
-  else d.trabajadores.push(p);
-  d.asignaciones = null;
-  guardar();
+  const diaSel = document.getElementById('diaSelect_' + sid);
+  const turnoSel = document.getElementById('turnoSelect_' + sid);
+  if (!diaSel || !turnoSel) return;
+  const nuevo = { id: 'd' + Date.now(), dia: diaSel.value, turno: turnoSel.value, trabajadores: [], personaBarra: null, asignaciones: null, confirmado: false };
+  mutar(data => {
+    const s = buscarSemana(data, sid); if (!s) return false;
+    if (buscarDia(s, nuevo.id)) return false;
+    s.dias.push(JSON.parse(JSON.stringify(nuevo)));
+  });
 }
-function setBarra(si, di, p) {
+function eliminarDia(sid, did) {
   if (!modoEditor) return;
-  const d = semanas[si].dias[di];
-  if (d.confirmado) return;
-  d.personaBarra = p || null;
-  d.asignaciones = null;
-  guardar();
+  mutar(data => {
+    const s = buscarSemana(data, sid); if (!s) return false;
+    const idx = s.dias.findIndex(d => d.id === did);
+    if (idx === -1) return false;
+    if (s.dias[idx].confirmado) restarHistoricoDia(data, s.dias[idx]);
+    s.dias.splice(idx, 1);
+  });
+}
+function toggleTrabajador(sid, did, p) {
+  if (!modoEditor) return;
+  mutar(data => {
+    const d = buscarDia(buscarSemana(data, sid), did);
+    if (!d || d.confirmado) return false;
+    if (d.trabajadores.includes(p)) { d.trabajadores = d.trabajadores.filter(x => x !== p); if (d.personaBarra === p) d.personaBarra = null; }
+    else d.trabajadores.push(p);
+    d.asignaciones = null;
+  });
+}
+function setBarra(sid, did, p) {
+  if (!modoEditor) return;
+  mutar(data => {
+    const d = buscarDia(buscarSemana(data, sid), did);
+    if (!d || d.confirmado) return false;
+    d.personaBarra = p || null;
+    d.asignaciones = null;
+  });
 }
 
 // =============== TAREAS SEMANALES: cuáles tocan ===============
-// Devuelve set de ids de tareas semanales YA hechas (check marcado) en esta semana
-function semanalesHechasEnSemana(semana) {
+// Set de ids de tareas semanales YA hechas (check marcado) en esta semana
+function semanalesHechasEnSemana(semana, ts = tareas) {
   const hechas = new Set();
   semana.dias.forEach(d => {
     if (!d.asignaciones) return;
     ['antes', 'despues'].forEach(bk => {
       Object.entries(d.asignaciones[bk] || {}).forEach(([tid, info]) => {
-        const t = tareaPorId(tid);
+        const t = tareaPorId(tid, ts);
         if (t && t.semanal && info.checked) hechas.add(tid);
       });
     });
   });
   return hechas;
 }
-// Devuelve set de ids de tareas semanales YA asignadas (aunque no hechas) en otros días de la semana
-function semanalesAsignadasEnSemana(semana, exceptoDiaId) {
+// Set de ids de tareas semanales YA asignadas (aunque no hechas) en otros días de la semana
+function semanalesAsignadasEnSemana(semana, exceptoDiaId, ts = tareas) {
   const asignadas = new Set();
   semana.dias.forEach(d => {
     if (d.id === exceptoDiaId) return;
     if (!d.asignaciones) return;
     ['antes', 'despues'].forEach(bk => {
       Object.keys(d.asignaciones[bk] || {}).forEach(tid => {
-        const t = tareaPorId(tid);
+        const t = tareaPorId(tid, ts);
         if (t && t.semanal) asignadas.add(tid);
       });
     });
@@ -626,40 +695,30 @@ function elegirReservas(noBarra, histTemp) {
   return cs[0];
 }
 
-function repartirDia(si, di) {
-  const semana = semanas[si];
-  const dia = semana.dias[di];
+function repartirDia(data, semana, dia) {
   const trabajadores = [...dia.trabajadores];
   const personaBarra = dia.personaBarra;
   const noBarra = trabajadores.filter(t => t !== personaBarra);
-  const histTemp = JSON.parse(JSON.stringify(historico));
+  const histTemp = JSON.parse(JSON.stringify(data.historico));
   const asignaciones = { antes: {}, despues: {}, barra: personaBarra || null };
 
-  // Determinar qué tareas semanales tocan este día:
-  // - las que NO se han hecho ni asignado ya en la semana
-  const hechas = semanalesHechasEnSemana(semana);
-  const asignadasOtros = semanalesAsignadasEnSemana(semana, dia.id);
-  const pendientesSemanales = tareasSemanales().filter(t => !hechas.has(t.id) && !asignadasOtros.has(t.id));
+  // Tareas semanales que tocan: las no hechas ni asignadas ya en la semana
+  const hechas = semanalesHechasEnSemana(semana, data.tareas);
+  const asignadasOtros = semanalesAsignadasEnSemana(semana, dia.id, data.tareas);
+  const pendientesSemanales = tareasSemanales(data.tareas).filter(t => !hechas.has(t.id) && !asignadasOtros.has(t.id));
 
-  // ¿Cuántas semanales meter hoy? Repartir equitativo entre los días restantes de la semana.
-  const totalDias = semana.dias.length;
-  const idxDia = di;
-  const diasRestantesIncluyendoHoy = totalDias - idxDia;
+  // Repartir equitativo entre los días que aún no tienen reparto (incluyendo este)
+  const diasSinReparto = semana.dias.filter(dd => dd.id === dia.id || !dd.asignaciones).length;
   let cuantasHoy = pendientesSemanales.length;
-  if (diasRestantesIncluyendoHoy > 1) {
-    cuantasHoy = Math.ceil(pendientesSemanales.length / diasRestantesIncluyendoHoy);
-  }
-  // Las semanales priorizadas: las que menos veces se han hecho en el histórico van primero
+  if (diasSinReparto > 1) cuantasHoy = Math.ceil(pendientesSemanales.length / diasSinReparto);
+  // Las que menos veces se han hecho en el histórico van primero
   const semanalesOrdenadas = [...pendientesSemanales].sort((a, b) => {
-    const ca = Object.values(historico).reduce((s, h) => s + (h[a.id] || 0), 0);
-    const cb = Object.values(historico).reduce((s, h) => s + (h[b.id] || 0), 0);
+    const ca = Object.values(data.historico).reduce((s, h) => s + (h[a.id] || 0), 0);
+    const cb = Object.values(data.historico).reduce((s, h) => s + (h[b.id] || 0), 0);
     return ca - cb;
   });
   const semanalesHoy = semanalesOrdenadas.slice(0, cuantasHoy);
-  const idsSemanalesHoy = new Set(semanalesHoy.map(t => t.id));
 
-  // Lista de tareas a repartir hoy en bloque 'antes': diarias obligatorias/opcionales + semanales de hoy
-  // En 'despues': las de ese bloque
   const barraExtra = { antes: 0, despues: 0 };
   const cargaTurno = {};
   function recalcularCarga() {
@@ -676,7 +735,7 @@ function repartirDia(si, di) {
     let pool = noBarra.filter(p => !evitar.includes(p));
     const barraPuede = personaBarra && !evitar.includes(personaBarra) && barraExtra[bloqueKey] < 1;
     if (pool.length === 0 && barraPuede) return { persona: personaBarra, esBarra: true };
-    if (pool.length === 0) { pool = noBarra.filter(p => !evitar.includes(p)); if (pool.length === 0) pool = [...noBarra]; }
+    if (pool.length === 0) pool = [...noBarra];
     if (pool.length === 0) return null;
     pool.sort((a, b) => {
       const cA = cargaTurno[a] || 0, cB = cargaTurno[b] || 0;
@@ -688,24 +747,27 @@ function repartirDia(si, di) {
     return { persona: pool[0], esBarra: false };
   }
 
-  // Prioritarias primero
-  const prioritarias = tareas.filter(t => t.prioritaria && !t.deBarra);
+  // Prioritarias primero; para "reservas" se respeta la preferencia del equipo
+  const prioritarias = data.tareas.filter(t => t.prioritaria && !t.deBarra);
   prioritarias.forEach(tarea => {
-    const res = elegirPersona(tarea, [], tarea.bloque);
+    let res = null;
+    if (tarea.id === 'reservas') {
+      const p = elegirReservas(noBarra, histTemp);
+      if (p) res = { persona: p, esBarra: false };
+    }
+    if (!res || !res.persona) res = elegirPersona(tarea, [], tarea.bloque);
     if (!res || !res.persona) return;
-    asignaciones[tarea.bloque][tarea.id] = { persona: res.persona, parentesis: false, checked: false };
+    asignaciones[tarea.bloque][tarea.id] = { persona: res.persona, checked: false };
     if (res.esBarra) barraExtra[tarea.bloque]++;
     if (!histTemp[res.persona]) histTemp[res.persona] = {};
     histTemp[res.persona][tarea.id] = (histTemp[res.persona][tarea.id] || 0) + 1;
   });
 
   function asignarBloque(bloqueKey) {
-    // tareas de este bloque: diarias (no semanal, no barra, no prioritaria) + semanales de hoy de este bloque
-    const diarias = tareas.filter(t => t.bloque === bloqueKey && !t.deBarra && !t.prioritaria && !t.semanal);
+    const diarias = data.tareas.filter(t => t.bloque === bloqueKey && !t.deBarra && !t.prioritaria && !t.semanal);
     const obligatorias = diarias.filter(t => t.obligatoria);
     const opcionales = diarias.filter(t => !t.obligatoria);
     const semanalesBloque = semanalesHoy.filter(t => t.bloque === bloqueKey);
-
     // Orden de asignación: obligatorias → semanales de hoy → opcionales
     const ordenadas = [...obligatorias, ...semanalesBloque, ...opcionales];
     ordenadas.forEach(tarea => {
@@ -716,199 +778,228 @@ function repartirDia(si, di) {
         const evitar = elegidos.map(e => e.persona);
         const res = elegirPersona(tarea, evitar, bloqueKey);
         if (!res || !res.persona) break;
-        elegidos.push({ persona: res.persona, parentesis: false });
+        elegidos.push({ persona: res.persona });
         if (res.esBarra) barraExtra[bloqueKey]++;
         if (!histTemp[res.persona]) histTemp[res.persona] = {};
         histTemp[res.persona][tarea.id] = (histTemp[res.persona][tarea.id] || 0) + 1;
       }
       if (numP > 1) asignaciones[bloqueKey][tarea.id] = { personas: elegidos, checked: false };
-      else if (elegidos.length === 1) asignaciones[bloqueKey][tarea.id] = { ...elegidos[0], checked: false };
+      else if (elegidos.length === 1) asignaciones[bloqueKey][tarea.id] = { persona: elegidos[0].persona, checked: false };
     });
   }
   asignarBloque('antes');
   asignarBloque('despues');
-  // Crear entradas para las tareas marcadas deBarra (asignadas a la persona de barra) para que tengan check
+  // Entradas para las tareas deBarra (asignadas a la persona de barra) para que tengan check
   if (asignaciones.barra) {
-    tareas.filter(tk => tk.deBarra).forEach(tk => {
+    data.tareas.filter(tk => tk.deBarra).forEach(tk => {
       asignaciones[tk.bloque][tk.id] = { persona: asignaciones.barra, checked: false, esBarra: true };
     });
   }
   return asignaciones;
 }
 
-function generarReparto(si, di) {
+function generarReparto(sid, did) {
   if (!modoEditor) return;
-  const d = semanas[si].dias[di];
-  if (!d.trabajadores || d.trabajadores.length === 0) return;
-  d.asignaciones = repartirDia(si, di);
-  d.confirmado = false;
-  guardar();
+  mutar(data => {
+    const s = buscarSemana(data, sid);
+    const d = buscarDia(s, did);
+    if (!d || !d.trabajadores || d.trabajadores.length === 0) return false;
+    d.asignaciones = repartirDia(data, s, d);
+    d.confirmado = false;
+  });
 }
 
-function confirmarDia(si, di) {
-  if (!modoEditor) return;
-  const d = semanas[si].dias[di];
-  if (!d.asignaciones || d.confirmado) return;
-  const a = d.asignaciones;
+// =============== HISTÓRICO (sumar/restar un día completo) ===============
+function sumarHistoricoDia(data, d) {
+  const a = d.asignaciones; if (!a) return;
   ['antes', 'despues'].forEach(b => {
     Object.entries(a[b] || {}).forEach(([tid, info]) => {
-      if (info.personas) { info.personas.forEach(p => { if (!historico[p.persona]) historico[p.persona] = {}; historico[p.persona][tid] = (historico[p.persona][tid] || 0) + 1; }); return; }
-      if (!historico[info.persona]) historico[info.persona] = {};
-      historico[info.persona][tid] = (historico[info.persona][tid] || 0) + 1;
+      const lista = info.personas ? info.personas.map(x => x.persona) : [info.persona];
+      lista.forEach(p => {
+        if (!p) return;
+        if (!data.historico[p]) data.historico[p] = {};
+        data.historico[p][tid] = (data.historico[p][tid] || 0) + 1;
+      });
     });
   });
   if (a.barra) {
-    if (!historico[a.barra]) historico[a.barra] = {};
-    historico[a.barra]['barra_count'] = (historico[a.barra]['barra_count'] || 0) + 1;
-    // Las tareas deBarra (Café+Aceros) ya están en el bloque y se sumaron arriba. Solo recargar cámaras aparte.
-    historico[a.barra]['recargar_camaras'] = (historico[a.barra]['recargar_camaras'] || 0) + 1;
+    if (!data.historico[a.barra]) data.historico[a.barra] = {};
+    data.historico[a.barra]['barra_count'] = (data.historico[a.barra]['barra_count'] || 0) + 1;
+    // Las tareas deBarra ya están en los bloques y se sumaron arriba. Solo recargar cámaras aparte.
+    data.historico[a.barra]['recargar_camaras'] = (data.historico[a.barra]['recargar_camaras'] || 0) + 1;
   }
-  d.confirmado = true;
-  guardar();
 }
-function desconfirmarDia(si, di) {
-  if (!modoEditor) return;
-  const d = semanas[si].dias[di];
-  if (!d.confirmado || !d.asignaciones) return;
-  const a = d.asignaciones;
+function restarHistoricoDia(data, d) {
+  const a = d.asignaciones; if (!a) return;
+  const restar = (p, tid) => {
+    if (data.historico[p] && data.historico[p][tid]) data.historico[p][tid] = Math.max(0, data.historico[p][tid] - 1);
+  };
   ['antes', 'despues'].forEach(b => {
     Object.entries(a[b] || {}).forEach(([tid, info]) => {
-      if (info.personas) { info.personas.forEach(p => { if (historico[p.persona] && historico[p.persona][tid]) historico[p.persona][tid] = Math.max(0, historico[p.persona][tid] - 1); }); return; }
-      if (historico[info.persona] && historico[info.persona][tid]) historico[info.persona][tid] = Math.max(0, historico[info.persona][tid] - 1);
+      const lista = info.personas ? info.personas.map(x => x.persona) : [info.persona];
+      lista.forEach(p => { if (p) restar(p, tid); });
     });
   });
-  if (a.barra && historico[a.barra]) {
-    if (historico[a.barra]['barra_count']) historico[a.barra]['barra_count'] = Math.max(0, historico[a.barra]['barra_count'] - 1);
-    if (historico[a.barra]['recargar_camaras']) historico[a.barra]['recargar_camaras'] = Math.max(0, historico[a.barra]['recargar_camaras'] - 1);
-  }
-  d.confirmado = false;
-  guardar();
+  if (a.barra) { restar(a.barra, 'barra_count'); restar(a.barra, 'recargar_camaras'); }
 }
 
-// =============== CHECK (desde modo normal también) ===============
-function toggleCheck(si, di, bloque, tareaId) {
-  const d = semanas[si].dias[di];
-  if (!d.asignaciones) return;
-  const info = d.asignaciones[bloque][tareaId];
-  if (!info) return;
-  info.checked = !info.checked;
-  guardarCheck();
-  render();
+function confirmarDia(sid, did) {
+  if (!modoEditor) return;
+  mutar(data => {
+    const d = buscarDia(buscarSemana(data, sid), did);
+    if (!d || !d.asignaciones || d.confirmado) return false;
+    sumarHistoricoDia(data, d);
+    d.confirmado = true;
+  });
+}
+function desconfirmarDia(sid, did) {
+  if (!modoEditor) return;
+  mutar(data => {
+    const d = buscarDia(buscarSemana(data, sid), did);
+    if (!d || !d.confirmado || !d.asignaciones) return false;
+    restarHistoricoDia(data, d);
+    d.confirmado = false;
+  });
+}
+
+// =============== CHECK (permitido también sin admin) ===============
+function toggleCheck(sid, did, bloque, tareaId) {
+  const dLoc = buscarDia(buscarSemana({ semanas }, sid), did);
+  const infoLoc = dLoc && dLoc.asignaciones && dLoc.asignaciones[bloque] && dLoc.asignaciones[bloque][tareaId];
+  if (!infoLoc) return;
+  const objetivo = !infoLoc.checked;
+  mutar(data => {
+    const d = buscarDia(buscarSemana(data, sid), did);
+    const info = d && d.asignaciones && d.asignaciones[bloque] && d.asignaciones[bloque][tareaId];
+    if (!info) return false;
+    info.checked = objetivo;
+  });
 }
 
 // =============== CAMBIAR / AÑADIR PERSONA ===============
-function abrirModalPersona(si, di, tipo, params) {
+function abrirModalPersona(sid, did, tipo, params) {
   if (!modoEditor) return;
   const modal = document.getElementById('modalPersona');
   const opts = document.getElementById('modalOptions');
   const title = document.getElementById('modalTitle');
-  const d = semanas[si].dias[di];
+  const d = buscarDia(buscarSemana({ semanas }, sid), did);
+  if (!d || !d.asignaciones) return;
   let personaActual = '', titulo = '', permitirQuitar = false;
   if (tipo === 'barra') { personaActual = d.asignaciones.barra; titulo = 'Persona en barra'; }
   else {
     const info = d.asignaciones[params.bloque][params.tareaId];
+    if (!info) return;
     const tObj = tareaPorId(params.tareaId);
     titulo = tObj ? tObj.nombre : params.tareaId;
     if (params.modo === 'add') { titulo = 'Añadir ayuda a: ' + titulo; }
     else {
-      if (info.personas) personaActual = info.personas[params.idxPersona].persona;
+      if (info.personas) personaActual = info.personas[params.idxPersona] ? info.personas[params.idxPersona].persona : '';
       else personaActual = info.persona;
       if (info.personas && info.personas.length > 1) permitirQuitar = true;
     }
   }
   title.textContent = titulo;
-  let html = personas.map(p => `<button class="modal-option ${p === personaActual ? 'current' : ''}" onclick='aplicarCambioPersona(${si}, ${di}, "${tipo}", ${JSON.stringify(params)}, "${esc(p)}")'>${esc(p)}</button>`).join('');
+  let html = personas.map(p => `<button class="modal-option ${p === personaActual ? 'current' : ''}" onclick="aplicarCambioPersona(${aj(sid)}, ${aj(did)}, ${aj(tipo)}, ${aj(params)}, ${aj(p)})">${esc(p)}</button>`).join('');
   if (permitirQuitar) {
-    html += `<button class="modal-option quitar" onclick='quitarPersona(${si}, ${di}, ${JSON.stringify(params)})'>✕ Quitar a ${esc(personaActual)}</button>`;
+    html += `<button class="modal-option quitar" onclick="quitarPersona(${aj(sid)}, ${aj(did)}, ${aj(params)})">✕ Quitar a ${esc(personaActual)}</button>`;
   }
   opts.innerHTML = html;
   modal.classList.add('show');
 }
 function cerrarModal() { document.getElementById('modalPersona').classList.remove('show'); }
 
-function aplicarCambioPersona(si, di, tipo, params, nuevaPersona) {
+function aplicarCambioPersona(sid, did, tipo, params, nuevaPersona) {
   if (!modoEditor) return;
-  const d = semanas[si].dias[di];
-  const a = d.asignaciones;
-  const confirmado = d.confirmado;
-  if (tipo === 'barra') {
-    const ant = a.barra; a.barra = nuevaPersona;
-    // Actualizar las entradas de tareas deBarra en los bloques para que apunten a la nueva persona
-    tareas.filter(tk => tk.deBarra).forEach(tk => {
-      if (a[tk.bloque] && a[tk.bloque][tk.id]) a[tk.bloque][tk.id].persona = nuevaPersona;
-    });
-    if (confirmado && ant !== nuevaPersona) {
-      if (historico[ant]) {
-        if (historico[ant]['barra_count']) historico[ant]['barra_count'] = Math.max(0, historico[ant]['barra_count'] - 1);
-        // Las tareas deBarra están en el bloque: restar al anterior, sumar al nuevo
-        tareas.filter(tk => tk.deBarra).forEach(tk => { if (historico[ant][tk.id]) historico[ant][tk.id] = Math.max(0, historico[ant][tk.id] - 1); });
-        if (historico[ant]['recargar_camaras']) historico[ant]['recargar_camaras'] = Math.max(0, historico[ant]['recargar_camaras'] - 1);
-      }
-      if (!historico[nuevaPersona]) historico[nuevaPersona] = {};
-      historico[nuevaPersona]['barra_count'] = (historico[nuevaPersona]['barra_count'] || 0) + 1;
-      tareas.filter(tk => tk.deBarra).forEach(tk => { historico[nuevaPersona][tk.id] = (historico[nuevaPersona][tk.id] || 0) + 1; });
-      historico[nuevaPersona]['recargar_camaras'] = (historico[nuevaPersona]['recargar_camaras'] || 0) + 1;
-    }
-  } else {
-    const info = a[params.bloque][params.tareaId];
-    if (params.modo === 'add') {
-      // Convertir a multi-persona y añadir
-      let lista;
-      if (info.personas) lista = info.personas;
-      else { lista = [{ persona: info.persona }]; }
-      if (!lista.find(x => x.persona === nuevaPersona)) {
-        lista.push({ persona: nuevaPersona });
-        if (confirmado) { if (!historico[nuevaPersona]) historico[nuevaPersona] = {}; historico[nuevaPersona][params.tareaId] = (historico[nuevaPersona][params.tareaId] || 0) + 1; }
-      }
-      a[params.bloque][params.tareaId] = { personas: lista, checked: info.checked || false };
-    } else {
-      let ant;
-      if (info.personas) { ant = info.personas[params.idxPersona].persona; info.personas[params.idxPersona].persona = nuevaPersona; }
-      else { ant = info.persona; info.persona = nuevaPersona; }
-      if (confirmado && ant !== nuevaPersona) {
-        if (historico[ant] && historico[ant][params.tareaId]) historico[ant][params.tareaId] = Math.max(0, historico[ant][params.tareaId] - 1);
-        if (!historico[nuevaPersona]) historico[nuevaPersona] = {};
-        historico[nuevaPersona][params.tareaId] = (historico[nuevaPersona][params.tareaId] || 0) + 1;
-      }
-    }
-  }
   cerrarModal();
-  guardar();
+  mutar(data => {
+    const d = buscarDia(buscarSemana(data, sid), did);
+    if (!d || !d.asignaciones) return false;
+    const a = d.asignaciones;
+    const confirmado = d.confirmado;
+    if (tipo === 'barra') {
+      const ant = a.barra;
+      if (ant === nuevaPersona) return false;
+      a.barra = nuevaPersona;
+      // Las entradas de tareas deBarra pasan a la nueva persona
+      data.tareas.filter(tk => tk.deBarra).forEach(tk => {
+        if (a[tk.bloque] && a[tk.bloque][tk.id]) a[tk.bloque][tk.id].persona = nuevaPersona;
+      });
+      if (confirmado) {
+        if (data.historico[ant]) {
+          if (data.historico[ant]['barra_count']) data.historico[ant]['barra_count'] = Math.max(0, data.historico[ant]['barra_count'] - 1);
+          data.tareas.filter(tk => tk.deBarra).forEach(tk => { if (data.historico[ant][tk.id]) data.historico[ant][tk.id] = Math.max(0, data.historico[ant][tk.id] - 1); });
+          if (data.historico[ant]['recargar_camaras']) data.historico[ant]['recargar_camaras'] = Math.max(0, data.historico[ant]['recargar_camaras'] - 1);
+        }
+        if (!data.historico[nuevaPersona]) data.historico[nuevaPersona] = {};
+        data.historico[nuevaPersona]['barra_count'] = (data.historico[nuevaPersona]['barra_count'] || 0) + 1;
+        data.tareas.filter(tk => tk.deBarra).forEach(tk => { data.historico[nuevaPersona][tk.id] = (data.historico[nuevaPersona][tk.id] || 0) + 1; });
+        data.historico[nuevaPersona]['recargar_camaras'] = (data.historico[nuevaPersona]['recargar_camaras'] || 0) + 1;
+      }
+    } else {
+      const info = a[params.bloque] && a[params.bloque][params.tareaId];
+      if (!info) return false;
+      if (params.modo === 'add') {
+        const lista = info.personas ? info.personas : [{ persona: info.persona }];
+        if (!lista.find(x => x.persona === nuevaPersona)) {
+          lista.push({ persona: nuevaPersona });
+          if (confirmado) { if (!data.historico[nuevaPersona]) data.historico[nuevaPersona] = {}; data.historico[nuevaPersona][params.tareaId] = (data.historico[nuevaPersona][params.tareaId] || 0) + 1; }
+        }
+        a[params.bloque][params.tareaId] = { personas: lista, checked: info.checked || false };
+      } else {
+        let ant;
+        if (info.personas) {
+          if (!info.personas[params.idxPersona]) return false;
+          ant = info.personas[params.idxPersona].persona;
+          info.personas[params.idxPersona].persona = nuevaPersona;
+        } else { ant = info.persona; info.persona = nuevaPersona; }
+        if (confirmado && ant !== nuevaPersona) {
+          if (data.historico[ant] && data.historico[ant][params.tareaId]) data.historico[ant][params.tareaId] = Math.max(0, data.historico[ant][params.tareaId] - 1);
+          if (!data.historico[nuevaPersona]) data.historico[nuevaPersona] = {};
+          data.historico[nuevaPersona][params.tareaId] = (data.historico[nuevaPersona][params.tareaId] || 0) + 1;
+        }
+      }
+    }
+  });
 }
 
-function quitarPersona(si, di, params) {
+function quitarPersona(sid, did, params) {
   if (!modoEditor) return;
-  const d = semanas[si].dias[di];
-  const info = d.asignaciones[params.bloque][params.tareaId];
-  if (!info || !info.personas) { cerrarModal(); return; }
-  const quitada = info.personas[params.idxPersona].persona;
-  info.personas.splice(params.idxPersona, 1);
-  if (d.confirmado && historico[quitada] && historico[quitada][params.tareaId]) historico[quitada][params.tareaId] = Math.max(0, historico[quitada][params.tareaId] - 1);
-  // si queda solo una, volver a formato simple
-  if (info.personas.length === 1) d.asignaciones[params.bloque][params.tareaId] = { persona: info.personas[0].persona, checked: info.checked || false };
   cerrarModal();
-  guardar();
+  mutar(data => {
+    const d = buscarDia(buscarSemana(data, sid), did);
+    if (!d || !d.asignaciones) return false;
+    const info = d.asignaciones[params.bloque] && d.asignaciones[params.bloque][params.tareaId];
+    if (!info || !info.personas || !info.personas[params.idxPersona]) return false;
+    const quitada = info.personas[params.idxPersona].persona;
+    info.personas.splice(params.idxPersona, 1);
+    if (d.confirmado && data.historico[quitada] && data.historico[quitada][params.tareaId]) data.historico[quitada][params.tareaId] = Math.max(0, data.historico[quitada][params.tareaId] - 1);
+    // si queda solo una, volver a formato simple
+    if (info.personas.length === 1) d.asignaciones[params.bloque][params.tareaId] = { persona: info.personas[0].persona, checked: info.checked || false };
+  });
 }
 
 // Quitar una tarea de un día concreto (no de la lista general)
-function quitarTareaDia(si, di, bloque, tareaId) {
+function quitarTareaDia(sid, did, bloque, tareaId) {
   if (!modoEditor) return;
-  const d = semanas[si].dias[di];
-  const info = d.asignaciones[bloque][tareaId];
-  if (!info) return;
   if (!confirm('¿Quitar esta tarea solo de este día?')) return;
-  if (d.confirmado) {
-    if (info.personas) info.personas.forEach(p => { if (historico[p.persona] && historico[p.persona][tareaId]) historico[p.persona][tareaId] = Math.max(0, historico[p.persona][tareaId] - 1); });
-    else if (info.persona && historico[info.persona] && historico[info.persona][tareaId]) historico[info.persona][tareaId] = Math.max(0, historico[info.persona][tareaId] - 1);
-  }
-  delete d.asignaciones[bloque][tareaId];
-  guardar();
+  mutar(data => {
+    const d = buscarDia(buscarSemana(data, sid), did);
+    if (!d || !d.asignaciones) return false;
+    const info = d.asignaciones[bloque] && d.asignaciones[bloque][tareaId];
+    if (!info) return false;
+    if (d.confirmado) {
+      const lista = info.personas ? info.personas.map(x => x.persona) : [info.persona];
+      lista.forEach(p => { if (p && data.historico[p] && data.historico[p][tareaId]) data.historico[p][tareaId] = Math.max(0, data.historico[p][tareaId] - 1); });
+    }
+    delete d.asignaciones[bloque][tareaId];
+  });
 }
 
 // Añadir una tarea (de la lista general) a un día concreto
-function abrirModalAñadirTareaDia(si, di, bloque) {
+function abrirModalAñadirTareaDia(sid, did, bloque) {
   if (!modoEditor) return;
-  const d = semanas[si].dias[di];
+  const d = buscarDia(buscarSemana({ semanas }, sid), did);
+  if (!d || !d.asignaciones) return;
   const modal = document.getElementById('modalPersona');
   const opts = document.getElementById('modalOptions');
   const title = document.getElementById('modalTitle');
@@ -918,33 +1009,34 @@ function abrirModalAñadirTareaDia(si, di, bloque) {
   if (candidatas.length === 0) {
     opts.innerHTML = '<p style="color:var(--text-3); font-size:14px; padding:8px;">Todas las tareas de este bloque ya están en el día.</p>';
   } else {
-    opts.innerHTML = candidatas.map(t => `<button class="modal-option" onclick="aplicarAñadirTareaDia(${si}, ${di}, '${bloque}', '${t.id}')">${esc(t.nombre)}</button>`).join('');
+    opts.innerHTML = candidatas.map(t => `<button class="modal-option" onclick="aplicarAñadirTareaDia(${aj(sid)}, ${aj(did)}, ${aj(bloque)}, ${aj(t.id)})">${esc(t.nombre)}</button>`).join('');
   }
   modal.classList.add('show');
 }
-function aplicarAñadirTareaDia(si, di, bloque, tareaId) {
+function aplicarAñadirTareaDia(sid, did, bloque, tareaId) {
   if (!modoEditor) return;
-  const d = semanas[si].dias[di];
-  const noBarra = d.trabajadores.filter(t => t !== d.personaBarra);
-  let persona = noBarra[0] || d.trabajadores[0];
-  if (noBarra.length > 0) {
-    persona = [...noBarra].sort((a, b) => {
-      const ca = contar(a, tareaId), cb = contar(b, tareaId);
-      if (ca !== cb) return ca - cb;
-      return contarTotal(a) - contarTotal(b);
-    })[0];
-  }
-  d.asignaciones[bloque][tareaId] = { persona, checked: false };
-  if (d.confirmado) { if (!historico[persona]) historico[persona] = {}; historico[persona][tareaId] = (historico[persona][tareaId] || 0) + 1; }
   cerrarModal();
-  guardar();
+  mutar(data => {
+    const d = buscarDia(buscarSemana(data, sid), did);
+    if (!d || !d.asignaciones) return false;
+    const noBarra = d.trabajadores.filter(t => t !== d.personaBarra);
+    const pool = noBarra.length > 0 ? noBarra : d.trabajadores;
+    if (pool.length === 0) return false;
+    const persona = [...pool].sort((a, b) => {
+      const ca = contar(a, tareaId, data.historico), cb = contar(b, tareaId, data.historico);
+      if (ca !== cb) return ca - cb;
+      return contarTotal(a, data.historico) - contarTotal(b, data.historico);
+    })[0];
+    d.asignaciones[bloque][tareaId] = { persona, checked: false };
+    if (d.confirmado) { if (!data.historico[persona]) data.historico[persona] = {}; data.historico[persona][tareaId] = (data.historico[persona][tareaId] || 0) + 1; }
+  });
 }
 
 // =============== WHATSAPP ===============
-function generarTextoWhatsapp(si, di) {
-  const semana = semanas[si];
-  const d = semana.dias[di];
-  if (!d.asignaciones) return '';
+function generarTextoWhatsapp(sid, did) {
+  const semana = semanas.find(s => s.id === sid);
+  const d = buscarDia(semana, did);
+  if (!d || !d.asignaciones) return '';
   const a = d.asignaciones;
   let txt = `*🧹 ${d.dia.toUpperCase()} · ${d.turno.toUpperCase()}*\n_${semana.nombre}_\n━━━━━━━━━━━━━━━\n\n`;
   if (a.barra) {
@@ -969,8 +1061,8 @@ function generarTextoWhatsapp(si, di) {
   txt += `\n━━━━━━━━━━━━━━━\n_⭐ prioritaria · 📅 semanal_\n\n*📌 IMPORTANTE: Si alguien acaba sus tareas, debe ayudar al resto a terminar las suyas. Trabajamos en equipo.*`;
   return txt;
 }
-function copiarDia(si, di) {
-  const texto = generarTextoWhatsapp(si, di);
+function copiarDia(sid, did) {
+  const texto = generarTextoWhatsapp(sid, did);
   if (!texto) return;
   navigator.clipboard.writeText(texto).then(() => mostrarBadge('copiedBadge')).catch(() => {
     const ta = document.createElement('textarea'); ta.value = texto; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
@@ -983,64 +1075,99 @@ function añadirPersona() {
   if (!modoEditor) return;
   const inp = document.getElementById('nuevaPersona');
   const n = inp.value.trim();
-  if (n && !personas.includes(n)) { personas.push(n); inp.value = ''; guardar(); }
+  if (!n) return;
+  inp.value = '';
+  mutar(data => { if (!data.personas.includes(n)) data.personas.push(n); });
 }
 function eliminarPersona(p) {
   if (!modoEditor) return;
-  if (!confirm(`¿Eliminar a ${p}?`)) return;
-  personas = personas.filter(x => x !== p);
-  guardar();
+  if (!confirm(`¿Eliminar a ${p}? Se quitará de los días sin confirmar y se borrará su histórico.`)) return;
+  mutar(data => {
+    data.personas = data.personas.filter(x => x !== p);
+    delete data.historico[p];
+    data.semanas.forEach(s => s.dias.forEach(d => {
+      if (d.confirmado) return; // los días confirmados quedan como registro
+      const estaba = d.trabajadores.includes(p) || d.personaBarra === p;
+      d.trabajadores = d.trabajadores.filter(x => x !== p);
+      if (d.personaBarra === p) d.personaBarra = null;
+      if (estaba && d.asignaciones) d.asignaciones = null; // su reparto ya no vale: regenerar
+    }));
+  });
 }
 function resetearHistorico() {
   if (!modoEditor) return;
   if (!confirm('¿Borrar todo el histórico?')) return;
-  historico = {};
-  semanas.forEach(s => s.dias.forEach(d => d.confirmado = false));
-  guardar();
+  mutar(data => {
+    data.historico = {};
+    data.semanas.forEach(s => s.dias.forEach(d => d.confirmado = false));
+  });
 }
 function resetearTodo() {
   if (!modoEditor) return;
   if (!confirm('¿Borrar TODO (personas, tareas, semanas e histórico)?')) return;
-  personas = [...PERSONAS_INICIALES]; semanas = []; historico = {}; tareas = JSON.parse(JSON.stringify(TAREAS_DEFAULT));
-  guardar();
+  mutar(data => {
+    data.personas = [...PERSONAS_INICIALES];
+    data.semanas = [];
+    data.historico = {};
+    data.tareas = JSON.parse(JSON.stringify(TAREAS_DEFAULT));
+  });
 }
 
 // =============== RENDER ===============
 function render() {
+  // Conservar el foco, lo escrito y los desplegables al repintar (los cambios en
+  // tiempo real de otros ya no te borran lo que estás haciendo)
+  const ae = document.activeElement;
+  let foco = null;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT') && ae.id) {
+    foco = { id: ae.id, value: ae.value, ss: ae.selectionStart, se: ae.selectionEnd };
+  }
+  const selecciones = {};
+  document.querySelectorAll('#semanasContainer select[id]').forEach(s => { selecciones[s.id] = s.value; });
+
   document.getElementById('personasList').innerHTML = personas.map(p =>
-    `<span class="pill">${esc(p)} ${modoEditor ? `<button onclick="eliminarPersona('${esc(p)}')">✕</button>` : ''}</span>`
+    `<span class="pill">${esc(p)} ${modoEditor ? `<button onclick="eliminarPersona(${aj(p)})">✕</button>` : ''}</span>`
   ).join('');
   renderTareasEditor();
 
   const cont = document.getElementById('semanasContainer');
   if (semanas.length === 0) {
     cont.innerHTML = `<div class="empty"><div class="empty-icon">◇</div><div class="empty-text">Sin semanas</div><div class="empty-sub">${modoEditor ? 'Pulsa "+ Nueva semana" para empezar' : 'Aún no se ha creado ningún cuadrante'}</div></div>`;
-    document.getElementById('historicoTable').innerHTML = renderHistorico();
-    return;
+  } else {
+    cont.innerHTML = semanas.map(semana => renderSemana(semana)).join('');
   }
-  cont.innerHTML = semanas.map((semana, si) => renderSemana(semana, si)).join('');
   document.getElementById('historicoTable').innerHTML = renderHistorico();
+
+  Object.entries(selecciones).forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; });
+  if (foco) {
+    const el = document.getElementById(foco.id);
+    if (el) {
+      if (el.value !== foco.value) el.value = foco.value;
+      el.focus();
+      if (el.tagName === 'INPUT' && foco.ss != null) { try { el.setSelectionRange(foco.ss, foco.se); } catch (e) {} }
+    }
+  }
 }
 
-function renderSemana(semana, si) {
-  const diasHTML = semana.dias.map((dia, di) => renderDia(si, di, dia)).join('');
+function renderSemana(semana) {
+  const sid = semana.id;
+  const diasHTML = semana.dias.map(dia => renderDia(semana, dia)).join('');
   const addRow = modoEditor ? `
     <div class="dia-add-row">
-      <select id="diaSelect_${si}">${DIAS_SEMANA.map(d => `<option value="${d}">${d}</option>`).join('')}</select>
-      <select id="turnoSelect_${si}">${TURNOS_TIPO.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
-      <button class="btn btn-ghost" onclick="añadirDia(${si})">+ Añadir día</button>
+      <select id="diaSelect_${esc(sid)}">${DIAS_SEMANA.map(d => `<option value="${d}">${d}</option>`).join('')}</select>
+      <select id="turnoSelect_${esc(sid)}">${TURNOS_TIPO.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
+      <button class="btn btn-ghost" onclick="añadirDia(${aj(sid)})">+ Añadir día</button>
     </div>` : '';
-  // Estado de tareas semanales
   const hechas = semanalesHechasEnSemana(semana);
   const totalSem = tareasSemanales().length;
   const semStatus = totalSem > 0 ? `<span class="dia-tag" style="background:var(--purple-soft); color:var(--purple);">📅 ${hechas.size}/${totalSem} semanales hechas</span>` : '';
   return `
     <div class="semana-block">
       <div class="semana-head">
-        <input type="text" class="semana-name" value="${esc(semana.nombre)}" ${!modoEditor ? 'disabled' : ''} onchange="actualizarNombreSemana(${si}, this.value)" />
+        <input type="text" class="semana-name" id="semNombre_${esc(sid)}" value="${esc(semana.nombre)}" ${!modoEditor ? 'disabled' : ''} onchange="actualizarNombreSemana(${aj(sid)}, this.value)" />
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           ${semStatus}
-          ${modoEditor ? `<button class="btn-link danger" onclick="eliminarSemana(${si})">Eliminar</button>` : ''}
+          ${modoEditor ? `<button class="btn-link danger" onclick="eliminarSemana(${aj(sid)})">Eliminar</button>` : ''}
         </div>
       </div>
       ${addRow}
@@ -1048,56 +1175,58 @@ function renderSemana(semana, si) {
     </div>`;
 }
 
-function renderDia(si, di, dia) {
+function renderDia(semana, dia) {
+  const sid = semana.id, did = dia.id;
   const cls = dia.confirmado ? 'dia-card confirmado' : 'dia-card';
   const tp = personas.map(p => {
     const a = dia.trabajadores.includes(p);
-    return `<button class="worker-pill ${a ? 'active' : ''}" ${dia.confirmado || !modoEditor ? 'disabled' : ''} onclick="toggleTrabajador(${si}, ${di}, '${esc(p)}')">${esc(p)}</button>`;
+    return `<button class="worker-pill ${a ? 'active' : ''}" ${dia.confirmado || !modoEditor ? 'disabled' : ''} onclick="toggleTrabajador(${aj(sid)}, ${aj(did)}, ${aj(p)})">${esc(p)}</button>`;
   }).join('');
   const bs = dia.trabajadores.length > 0 ? `
     <div class="field-block">
       <div class="field-label">🍺 Persona en barra</div>
-      <select ${dia.confirmado || !modoEditor ? 'disabled' : ''} onchange="setBarra(${si}, ${di}, this.value)">
+      <select ${dia.confirmado || !modoEditor ? 'disabled' : ''} onchange="setBarra(${aj(sid)}, ${aj(did)}, this.value)">
         <option value="">— Nadie en barra —</option>
         ${dia.trabajadores.map(t => `<option value="${esc(t)}" ${dia.personaBarra === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}
       </select>
       ${dia.personaBarra ? `<div class="barra-note"><b>${esc(dia.personaBarra)}</b> en barra: limpiar barra, reponer, preparar servicio, tareas 🍺 y recargar cámaras.</div>` : ''}
     </div>` : '';
-  const gb = !dia.confirmado && modoEditor ? `<button class="btn btn-primary" ${dia.trabajadores.length === 0 ? 'disabled' : ''} onclick="generarReparto(${si}, ${di})">✦ ${dia.asignaciones ? 'Regenerar' : 'Generar reparto'}</button>` : '';
+  const gb = !dia.confirmado && modoEditor ? `<button class="btn btn-primary" ${dia.trabajadores.length === 0 ? 'disabled' : ''} onclick="generarReparto(${aj(sid)}, ${aj(did)})">✦ ${dia.asignaciones ? 'Regenerar' : 'Generar reparto'}</button>` : '';
   return `<div class="${cls}">
     <div class="dia-header">
       <div class="dia-titulo">${esc(dia.dia)} <span class="dia-tag">${esc(dia.turno)}</span></div>
       <div style="display:flex; gap:8px; align-items:center;">
         ${dia.confirmado ? '<span class="confirmed-tag">✓ Confirmado</span>' : ''}
-        ${modoEditor ? `<button class="del-btn" onclick="eliminarDia(${si}, ${di})">🗑</button>` : ''}
+        ${modoEditor ? `<button class="del-btn" onclick="eliminarDia(${aj(sid)}, ${aj(did)})">🗑</button>` : ''}
       </div>
     </div>
     <div class="dia-body">
       ${modoEditor ? `<div class="field-block"><div class="field-label">¿Quiénes trabajan?</div><div style="display:flex; flex-wrap:wrap; gap:6px;">${tp}</div></div>` : (dia.trabajadores.length > 0 ? `<div class="field-block"><div class="field-label">Equipo</div><div style="display:flex; flex-wrap:wrap; gap:6px;">${dia.trabajadores.map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div></div>` : '')}
       ${modoEditor ? bs : ''}
       ${gb}
-      ${dia.asignaciones ? renderAsignaciones(si, di, dia) : ''}
+      ${dia.asignaciones ? renderAsignaciones(semana, dia) : ''}
     </div>
   </div>`;
 }
 
-function renderAsignaciones(si, di, dia) {
+function renderAsignaciones(semana, dia) {
+  const sid = semana.id, did = dia.id;
   const a = dia.asignaciones;
   const renderPersona = (persona, onClick) => {
     const ed = modoEditor ? 'editable' : '';
     const click = modoEditor ? `onclick="${onClick}"` : '';
     return `<span class="tarea-persona ${ed}" ${click}>${esc(persona)}</span>`;
   };
-  const checkBox = (bloque, tareaId, checked) => `<div class="tarea-check ${checked ? 'checked' : ''}" onclick="toggleCheck(${si}, ${di}, '${bloque}', '${tareaId}')">${checked ? '✓' : ''}</div>`;
+  const checkBox = (bloque, tareaId, checked) => `<div class="tarea-check ${checked ? 'checked' : ''}" onclick="toggleCheck(${aj(sid)}, ${aj(did)}, ${aj(bloque)}, ${aj(tareaId)})">${checked ? '✓' : ''}</div>`;
 
   const tareaHTML = (arr, bk) => arr.map(t => {
     if (t.deBarra) {
       if (!a.barra) return '';
       const info = a[bk][t.id] || {};
-      const quitarBtn = modoEditor ? `<button class="del-btn" onclick="quitarTareaDia(${si}, ${di}, '${bk}', '${t.id}')" title="Quitar de este día">✕</button>` : '';
+      const quitarBtn = modoEditor ? `<button class="del-btn" onclick="quitarTareaDia(${aj(sid)}, ${aj(did)}, ${aj(bk)}, ${aj(t.id)})" title="Quitar de este día">✕</button>` : '';
       return `<div class="tarea-row barra-row ${info.checked ? 'hecha' : ''}">
         <div class="tarea-left">${checkBox(bk, t.id, info.checked)}<span class="tarea-nombre">🍺 ${esc(t.nombre)}</span></div>
-        <div class="tarea-derecha">${renderPersona(a.barra, `abrirModalPersona(${si}, ${di}, 'barra', {})`)}${quitarBtn}</div></div>`;
+        <div class="tarea-derecha">${renderPersona(a.barra, `abrirModalPersona(${aj(sid)}, ${aj(did)}, ${aj('barra')}, {})`)}${quitarBtn}</div></div>`;
     }
     const info = a[bk][t.id]; if (!info) return '';
     let cls = 'tarea-row';
@@ -1106,26 +1235,26 @@ function renderAsignaciones(si, di, dia) {
     if (info.checked) cls += ' hecha';
     let pH = '';
     if (info.personas) {
-      pH = info.personas.map((p, idx) => renderPersona(p.persona, `abrirModalPersona(${si}, ${di}, 'tarea', {bloque:'${bk}',tareaId:'${t.id}',idxPersona:${idx}})`)).join(' <span style="color:var(--text-4);">+</span> ');
+      pH = info.personas.map((p, idx) => renderPersona(p.persona, `abrirModalPersona(${aj(sid)}, ${aj(did)}, ${aj('tarea')}, ${aj({ bloque: bk, tareaId: t.id, idxPersona: idx })})`)).join(' <span style="color:var(--text-4);">+</span> ');
     } else {
-      pH = renderPersona(info.persona, `abrirModalPersona(${si}, ${di}, 'tarea', {bloque:'${bk}',tareaId:'${t.id}'})`);
+      pH = renderPersona(info.persona, `abrirModalPersona(${aj(sid)}, ${aj(did)}, ${aj('tarea')}, ${aj({ bloque: bk, tareaId: t.id })})`);
     }
-    const addBtn = modoEditor ? `<button class="add-person-btn" onclick="abrirModalPersona(${si}, ${di}, 'tarea', {bloque:'${bk}',tareaId:'${t.id}',modo:'add'})" title="Añadir ayuda">+</button>` : '';
-    const quitarBtn = modoEditor ? `<button class="del-btn" onclick="quitarTareaDia(${si}, ${di}, '${bk}', '${t.id}')" title="Quitar de este día">✕</button>` : '';
+    const addBtn = modoEditor ? `<button class="add-person-btn" onclick="abrirModalPersona(${aj(sid)}, ${aj(did)}, ${aj('tarea')}, ${aj({ bloque: bk, tareaId: t.id, modo: 'add' })})" title="Añadir ayuda">+</button>` : '';
+    const quitarBtn = modoEditor ? `<button class="del-btn" onclick="quitarTareaDia(${aj(sid)}, ${aj(did)}, ${aj(bk)}, ${aj(t.id)})" title="Quitar de este día">✕</button>` : '';
     const est = t.prioritaria ? '<span class="estrella">⭐</span>' : (t.semanal ? '<span class="badge-sem">📅</span>' : '');
     return `<div class="${cls}">
       <div class="tarea-left">${checkBox(bk, t.id, info.checked)}<span class="tarea-nombre">${est}${esc(t.nombre)}</span></div>
       <div class="tarea-derecha">${pH}${addBtn}${quitarBtn}</div></div>`;
   }).join('');
 
-  const bH = a.barra ? `<div class="bloque-tareas"><h4>🍺 Barra</h4><div class="tarea-row barra-row"><div class="tarea-left"><span class="tarea-nombre">Limpiar barra · Reponer · Preparar · Tareas 🍺 · Cámaras</span></div><div class="tarea-derecha">${renderPersona(a.barra, `abrirModalPersona(${si}, ${di}, 'barra', {})`)}</div></div></div>` : '';
+  const bH = a.barra ? `<div class="bloque-tareas"><h4>🍺 Barra</h4><div class="tarea-row barra-row"><div class="tarea-left"><span class="tarea-nombre">Limpiar barra · Reponer · Preparar · Tareas 🍺 · Cámaras</span></div><div class="tarea-derecha">${renderPersona(a.barra, `abrirModalPersona(${aj(sid)}, ${aj(did)}, ${aj('barra')}, {})`)}</div></div></div>` : '';
   const ab = modoEditor ? (dia.confirmado
-    ? `<button class="btn btn-ghost" onclick="desconfirmarDia(${si}, ${di})">↺ Deshacer</button>`
-    : `<button class="btn btn-green" onclick="confirmarDia(${si}, ${di})">✓ Confirmar y guardar</button>`) : '';
-  const cb = `<button class="btn btn-whatsapp" onclick="copiarDia(${si}, ${di})">📋 Copiar para WhatsApp</button>`;
+    ? `<button class="btn btn-ghost" onclick="desconfirmarDia(${aj(sid)}, ${aj(did)})">↺ Deshacer</button>`
+    : `<button class="btn btn-green" onclick="confirmarDia(${aj(sid)}, ${aj(did)})">✓ Confirmar y guardar</button>`) : '';
+  const cb = `<button class="btn btn-whatsapp" onclick="copiarDia(${aj(sid)}, ${aj(did)})">📋 Copiar para WhatsApp</button>`;
   const ayuda = modoEditor ? '<p class="hint">✦ Pulsa un nombre para cambiarlo · pulsa + para añadir ayuda · marca el check al terminar</p>' : '<p class="hint">✓ Marca cada tarea cuando la termines</p>';
-  const addAntes = modoEditor ? `<button class="btn btn-ghost btn-icon" style="margin-top:6px; width:100%;" onclick="abrirModalAñadirTareaDia(${si}, ${di}, 'antes')">+ Añadir tarea a este día</button>` : '';
-  const addDespues = modoEditor ? `<button class="btn btn-ghost btn-icon" style="margin-top:6px; width:100%;" onclick="abrirModalAñadirTareaDia(${si}, ${di}, 'despues')">+ Añadir tarea a este día</button>` : '';
+  const addAntes = modoEditor ? `<button class="btn btn-ghost btn-icon" style="margin-top:6px; width:100%;" onclick="abrirModalAñadirTareaDia(${aj(sid)}, ${aj(did)}, ${aj('antes')})">+ Añadir tarea a este día</button>` : '';
+  const addDespues = modoEditor ? `<button class="btn btn-ghost btn-icon" style="margin-top:6px; width:100%;" onclick="abrirModalAñadirTareaDia(${aj(sid)}, ${aj(did)}, ${aj('despues')})">+ Añadir tarea a este día</button>` : '';
   return `<div class="asignaciones">${bH}
     <div class="bloque-tareas"><h4>Antes del servicio</h4>${tareaHTML(tareasAntes(), 'antes')}${addAntes}</div>
     <div class="bloque-tareas"><h4>Después del servicio</h4>${tareaHTML(tareasDespues(), 'despues')}${addDespues}</div>
@@ -1136,15 +1265,15 @@ function renderAsignaciones(si, di, dia) {
 function renderTareasEditor() {
   const renderBloque = (arr) => arr.map((t, idx) => {
     const flags = `
-      <span class="flag-badge ${t.obligatoria ? 'on-oblig' : ''}" ${modoEditor ? `onclick="toggleFlag('${t.id}','obligatoria')"` : ''} title="Obligatoria">✓</span>
-      <span class="flag-badge ${t.prioritaria ? 'on-prio' : ''}" ${modoEditor ? `onclick="toggleFlag('${t.id}','prioritaria')"` : ''} title="Prioritaria">⭐</span>
-      <span class="flag-badge ${t.deBarra ? 'on-barra' : ''}" ${modoEditor ? `onclick="toggleFlag('${t.id}','deBarra')"` : ''} title="De barra">🍺</span>
-      <span class="flag-badge ${t.doble ? 'on-doble' : ''}" ${modoEditor ? `onclick="toggleFlag('${t.id}','doble')"` : ''} title="Doble (5+)">👥</span>
-      <span class="flag-badge ${t.semanal ? 'on-sem' : ''}" ${modoEditor ? `onclick="toggleFlag('${t.id}','semanal')"` : ''} title="Semanal">📅</span>
+      <span class="flag-badge ${t.obligatoria ? 'on-oblig' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('obligatoria')})"` : ''} title="Obligatoria">✓</span>
+      <span class="flag-badge ${t.prioritaria ? 'on-prio' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('prioritaria')})"` : ''} title="Prioritaria">⭐</span>
+      <span class="flag-badge ${t.deBarra ? 'on-barra' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('deBarra')})"` : ''} title="De barra">🍺</span>
+      <span class="flag-badge ${t.doble ? 'on-doble' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('doble')})"` : ''} title="Doble (5+)">👥</span>
+      <span class="flag-badge ${t.semanal ? 'on-sem' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('semanal')})"` : ''} title="Semanal">📅</span>
     `;
-    const arrows = modoEditor ? `<div class="arrow-stack"><button class="arrow-btn" onclick="moverTarea('${t.id}','up')" ${idx === 0 ? 'disabled' : ''}>▲</button><button class="arrow-btn" onclick="moverTarea('${t.id}','down')" ${idx === arr.length - 1 ? 'disabled' : ''}>▼</button></div>` : '';
-    const delBtn = modoEditor ? `<button class="del-btn" onclick="eliminarTarea('${t.id}')">✕</button>` : '';
-    const nombre = modoEditor ? `<input class="tarea-input" value="${esc(t.nombre)}" onchange="renombrarTarea('${t.id}', this.value)" />` : `<span style="flex:1;">${esc(t.nombre)}</span>`;
+    const arrows = modoEditor ? `<div class="arrow-stack"><button class="arrow-btn" onclick="moverTarea(${aj(t.id)}, ${aj('up')})" ${idx === 0 ? 'disabled' : ''}>▲</button><button class="arrow-btn" onclick="moverTarea(${aj(t.id)}, ${aj('down')})" ${idx === arr.length - 1 ? 'disabled' : ''}>▼</button></div>` : '';
+    const delBtn = modoEditor ? `<button class="del-btn" onclick="eliminarTarea(${aj(t.id)})">✕</button>` : '';
+    const nombre = modoEditor ? `<input class="tarea-input" id="tNombre_${esc(t.id)}" value="${esc(t.nombre)}" onchange="renombrarTarea(${aj(t.id)}, this.value)" />` : `<span style="flex:1;">${esc(t.nombre)}</span>`;
     return `<div class="tarea-editor-row">${arrows}${nombre}<div class="flags">${flags}</div>${delBtn}</div>`;
   }).join('');
   document.getElementById('tareasAntesList').innerHTML = renderBloque(tareasAntes());
