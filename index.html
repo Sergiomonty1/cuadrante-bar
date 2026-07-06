@@ -118,6 +118,23 @@
   .tarea-persona { font-weight: 600; color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all var(--t-fast); border: 1px dashed transparent; font-size: 13px; }
   .tarea-persona.editable:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-2); }
   .tarea-persona.sin-asignar { color: var(--text-4); border-color: var(--border-2); font-weight: 400; font-style: italic; }
+
+  .carga-panel { margin: 14px 0; padding: 8px 14px; background: var(--bg-1); border: 1px solid var(--border-2); border-radius: var(--r-md); }
+  .carga-panel .field-label { margin: 6px 0 4px; }
+  .carga-sin { font-size: 12px; color: var(--yellow); font-style: italic; margin-bottom: 4px; }
+  .carga-item { border-bottom: 1px solid var(--border); }
+  .carga-item:last-child { border-bottom: none; }
+  .carga-item summary { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 9px 2px; list-style: none; font-size: 14px; }
+  .carga-item summary::-webkit-details-marker { display: none; }
+  .carga-item summary::before { content: '▸'; color: var(--text-4); font-size: 10px; width: 10px; }
+  .carga-item[open] summary::before { content: '▾'; }
+  .carga-nombre { flex: 1; color: var(--text); font-weight: 500; }
+  .carga-count { background: var(--bg-3); color: var(--text-2); border-radius: 999px; min-width: 26px; text-align: center; padding: 2px 9px; font-family: var(--mono); font-size: 12px; font-weight: 700; }
+  .carga-count.alta { background: var(--accent-soft); color: var(--accent-2); }
+  .carga-count.cero { color: var(--text-4); }
+  .carga-lista { margin: 0 0 8px 24px; padding: 0; list-style: disc; color: var(--text-2); font-size: 13px; }
+  .carga-lista li { padding: 2px 0; }
+  .carga-lista li.carga-vacia { color: var(--text-4); font-style: italic; list-style: none; margin-left: -18px; }
   .add-person-btn { background: var(--bg-3); border: 1px dashed var(--border-2); color: var(--text-3); border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: all var(--t-fast); flex-shrink: 0; }
   .add-person-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
   .estrella { color: var(--blue); margin-right: 4px; font-size: 11px; }
@@ -636,6 +653,21 @@ function moverTarea(id, dir) {
     [data.tareas[ig], data.tareas[og]] = [data.tareas[og], data.tareas[ig]];
   });
 }
+// Deja las tareas de barra (🍺) al principio de su bloque, conservando el
+// orden relativo del resto. Estable: agrupa antes→despues y barra primero.
+function reordenarBarraArriba(data) {
+  const rank = { antes: 0, despues: 1 };
+  data.tareas.forEach((t, i) => { t.__i = i; });
+  data.tareas.sort((a, b) => {
+    const ra = rank[a.bloque] != null ? rank[a.bloque] : 2;
+    const rb = rank[b.bloque] != null ? rank[b.bloque] : 2;
+    if (ra !== rb) return ra - rb;
+    const ba = a.deBarra ? 0 : 1, bb = b.deBarra ? 0 : 1;
+    if (ba !== bb) return ba - bb;
+    return a.__i - b.__i;
+  });
+  data.tareas.forEach(t => { delete t.__i; });
+}
 function toggleFlag(id, flag) {
   if (!modoEditor) return;
   mutar(data => {
@@ -643,6 +675,8 @@ function toggleFlag(id, flag) {
     t[flag] = !t[flag];
     // semanal y obligatoria/diaria son excluyentes; si marca semanal, quita obligatoria
     if (flag === 'semanal' && t.semanal) t.obligatoria = false;
+    // Las tareas de barra se colocan arriba solas
+    if (flag === 'deBarra') reordenarBarraArriba(data);
   });
 }
 function renombrarTarea(id, nuevo) {
@@ -1358,6 +1392,50 @@ function renderDia(semana, dia) {
   </div>`;
 }
 
+// Recuento de tareas que lleva cada persona en este día (para el panel de carga)
+function cargaPorPersonaDia(dia) {
+  const a = dia.asignaciones;
+  const mapa = {};
+  dia.trabajadores.forEach(p => { mapa[p] = []; });
+  ['antes', 'despues'].forEach(bk => {
+    Object.entries(a[bk] || {}).forEach(([tid, info]) => {
+      const t = tareaPorId(tid);
+      const nombre = t ? t.nombre : tid;
+      const lista = info.personas ? info.personas.map(x => x.persona) : [info.persona];
+      lista.forEach(p => { if (p) { if (!mapa[p]) mapa[p] = []; mapa[p].push(nombre); } });
+    });
+  });
+  if (a.barra) { if (!mapa[a.barra]) mapa[a.barra] = []; mapa[a.barra].unshift('🍺 Barra (limpiar, reponer, cámaras)'); }
+  return mapa;
+}
+// Estado abierto/cerrado de cada desplegable, para conservarlo entre repintados
+const cargaAbiertos = new Set();
+function toggleCargaAbierto(el) { if (el.open) cargaAbiertos.add(el.id); else cargaAbiertos.delete(el.id); }
+
+function renderCargaDia(dia) {
+  const did = dia.id;
+  const mapa = cargaPorPersonaDia(dia);
+  const nombres = Object.keys(mapa);
+  if (nombres.length === 0) return '';
+  const maxN = Math.max(...nombres.map(p => mapa[p].length));
+  const orden = nombres.sort((x, y) => mapa[y].length - mapa[x].length || x.localeCompare(y));
+  // Nº de tareas sin asignar en el día
+  let sinAsignar = 0;
+  ['antes', 'despues'].forEach(bk => Object.values(dia.asignaciones[bk] || {}).forEach(i => { if (i && !i.persona && !i.personas) sinAsignar++; }));
+  const items = orden.map(p => {
+    const ts = mapa[p];
+    const id = 'carga_' + did + '_' + p.replace(/[^a-zA-Z0-9]/g, '');
+    const cntCls = ts.length === 0 ? 'cero' : (ts.length === maxN && maxN > 0 ? 'alta' : '');
+    const lista = ts.length ? ts.map(n => `<li>${esc(n)}</li>`).join('') : '<li class="carga-vacia">Sin tareas todavía</li>';
+    return `<details class="carga-item" id="${esc(id)}" ${cargaAbiertos.has(id) ? 'open' : ''} ontoggle="toggleCargaAbierto(this)">
+      <summary><span class="carga-nombre">${esc(p)}</span><span class="carga-count ${cntCls}">${ts.length}</span></summary>
+      <ul class="carga-lista">${lista}</ul>
+    </details>`;
+  }).join('');
+  const nota = sinAsignar > 0 ? `<div class="carga-sin">⚠ ${sinAsignar} tarea${sinAsignar > 1 ? 's' : ''} sin asignar</div>` : '';
+  return `<div class="carga-panel"><div class="field-label">📊 Carga por persona · pulsa para ver sus tareas</div>${nota}${items}</div>`;
+}
+
 function renderAsignaciones(semana, dia) {
   const sid = semana.id, did = dia.id;
   const a = dia.asignaciones;
@@ -1406,6 +1484,7 @@ function renderAsignaciones(semana, dia) {
   return `<div class="asignaciones">${bH}
     <div class="bloque-tareas"><h4>Antes del servicio</h4>${tareaHTML(tareasAntes(), 'antes')}${addAntes}</div>
     <div class="bloque-tareas"><h4>Después del servicio</h4>${tareaHTML(tareasDespues(), 'despues')}${addDespues}</div>
+    ${modoEditor ? renderCargaDia(dia) : ''}
     ${ayuda}
     <div class="actions">${cuadrarBtn} ${ab} ${cb}</div></div>`;
 }
@@ -1466,7 +1545,8 @@ Object.assign(window, {
   confirmarDia, desconfirmarDia, copiarDia, resetearHistorico, resetearTodo, añadirTarea,
   eliminarTarea, añadirTareaNombre, moverTarea, toggleFlag, renombrarTarea, abrirModalPersona, cerrarModal,
   aplicarCambioPersona, quitarPersona, quitarTareaDia, abrirModalAñadirTareaDia, aplicarAñadirTareaDia,
-  abrirModalCalendario, cerrarCalendario, calMoverMes, crearSemanaDesdeFecha, crearSemanaSinFecha, cuadrarPersonas
+  abrirModalCalendario, cerrarCalendario, calMoverMes, crearSemanaDesdeFecha, crearSemanaSinFecha, cuadrarPersonas,
+  toggleCargaAbierto
 });
 
 document.getElementById('nuevaPersona').addEventListener('keydown', e => { if (e.key === 'Enter') añadirPersona(); });
