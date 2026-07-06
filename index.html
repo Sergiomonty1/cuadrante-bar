@@ -293,7 +293,7 @@
 
   <section class="card" id="tareasCard">
     <div class="card-h"><div class="card-title"><span class="ic">✦</span>Tareas</div></div>
-    <p class="hint" style="margin: 0 0 16px;">Por prioridad (arriba = primero). <span style="color:var(--red)">✓</span> obligatoria · <span style="color:var(--blue)">⭐</span> prioritaria · <span style="color:var(--accent)">🍺</span> de barra · <span style="color:var(--green)">👥</span> doble · <span style="color:var(--purple)">📅</span> semanal (1 vez/semana)</p>
+    <p class="hint" style="margin: 0 0 16px;">Por prioridad (arriba = primero). <span style="color:var(--red)">✓</span> obligatoria · <span style="color:var(--blue)">⭐</span> prioritaria · <span style="color:var(--accent)">🍺</span> de barra · <span style="color:var(--green)">👥</span> doble (2 pers.) · <span style="color:var(--purple)">📅</span> semanal (1 vez/semana)</p>
     <div class="tareas-grid">
       <div>
         <h3>Antes del servicio</h3>
@@ -883,12 +883,13 @@ function repartirDia(data, dia) {
     const ordenadas = [...obligatorias, ...opcionales];
     ordenadas.forEach(tarea => {
       if (asignaciones[bloqueKey][tarea.id]) return;
-      const numP = (tarea.doble && trabajadores.length >= 5) ? 2 : 1;
+      const numP = tarea.doble ? 2 : 1; // doble = 2 personas en esa tarea
       const elegidos = [];
       for (let i = 0; i < numP; i++) {
         const evitar = elegidos.map(e => e.persona);
         const res = elegirPersona(tarea, evitar, bloqueKey);
         if (!res || !res.persona) break;
+        if (elegidos.some(e => e.persona === res.persona)) break; // no repetir persona si no hay suficiente gente
         elegidos.push({ persona: res.persona });
         if (res.esBarra) barraExtra[bloqueKey]++;
         if (!histTemp[res.persona]) histTemp[res.persona] = {};
@@ -1415,7 +1416,7 @@ function renderTareasEditor() {
       <span class="flag-badge ${t.obligatoria ? 'on-oblig' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('obligatoria')})"` : ''} title="Obligatoria">✓</span>
       <span class="flag-badge ${t.prioritaria ? 'on-prio' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('prioritaria')})"` : ''} title="Prioritaria">⭐</span>
       <span class="flag-badge ${t.deBarra ? 'on-barra' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('deBarra')})"` : ''} title="De barra">🍺</span>
-      <span class="flag-badge ${t.doble ? 'on-doble' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('doble')})"` : ''} title="Doble (5+)">👥</span>
+      <span class="flag-badge ${t.doble ? 'on-doble' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('doble')})"` : ''} title="Doble (2 personas)">👥</span>
       <span class="flag-badge ${t.semanal ? 'on-sem' : ''}" ${modoEditor ? `onclick="toggleFlag(${aj(t.id)}, ${aj('semanal')})"` : ''} title="Semanal">📅</span>
     `;
     const arrows = modoEditor ? `<div class="arrow-stack"><button class="arrow-btn" onclick="moverTarea(${aj(t.id)}, ${aj('up')})" ${idx === 0 ? 'disabled' : ''}>▲</button><button class="arrow-btn" onclick="moverTarea(${aj(t.id)}, ${aj('down')})" ${idx === arr.length - 1 ? 'disabled' : ''}>▼</button></div>` : '';
