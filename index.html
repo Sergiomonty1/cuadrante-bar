@@ -418,6 +418,10 @@ const TAREAS_DEFAULT = [
 const TAREA_RECARGAR_CAMARAS = { id: 'recargar_camaras', nombre: 'Recargar cámaras', deBarra: true };
 const PREFERENCIA_RESERVAS = ['Miguel', 'Sergio', 'Mireya', 'Alexandru'];
 
+// Reglas internas: las personas de una tarea del grupo no pueden hacer las otras.
+// Norma: quien hace Salón 2 no puede hacer también la terraza (y viceversa).
+const EXCLUSIONES = [['salon2', 'terraza_completa']];
+
 // Sugerencias de tareas típicas de bar: se añaden con un clic.
 // Las que ya estén en la lista no se muestran.
 const SUGERENCIAS = {
@@ -892,6 +896,26 @@ function repartirDia(data, dia) {
     });
     return { persona: pool[0], esBarra: false };
   }
+  // Personas ya asignadas a una tarea concreta (para las reglas de exclusión)
+  function personasEnTarea(tid) {
+    const res = [];
+    ['antes', 'despues'].forEach(bk => {
+      const info = asignaciones[bk][tid];
+      if (!info) return;
+      if (info.personas) info.personas.forEach(p => { if (p.persona) res.push(p.persona); });
+      else if (info.persona) res.push(info.persona);
+    });
+    return res;
+  }
+  // Personas a evitar en 'tid' por chocar con una tarea excluida ya asignada
+  function conflictosDe(tid) {
+    const evitar = [];
+    EXCLUSIONES.forEach(grupo => {
+      if (!grupo.includes(tid)) return;
+      grupo.forEach(otro => { if (otro !== tid) personasEnTarea(otro).forEach(p => evitar.push(p)); });
+    });
+    return evitar;
+  }
 
   // Prioritarias primero; para "reservas" se respeta la preferencia del equipo
   const prioritarias = data.tareas.filter(t => t.prioritaria && !t.deBarra);
@@ -901,7 +925,7 @@ function repartirDia(data, dia) {
       const p = elegirReservas(noBarra, histTemp);
       if (p) res = { persona: p, esBarra: false };
     }
-    if (!res || !res.persona) res = elegirPersona(tarea, [], tarea.bloque);
+    if (!res || !res.persona) res = elegirPersona(tarea, conflictosDe(tarea.id), tarea.bloque);
     if (!res || !res.persona) return;
     asignaciones[tarea.bloque][tarea.id] = { persona: res.persona };
     if (res.esBarra) barraExtra[tarea.bloque]++;
@@ -920,7 +944,7 @@ function repartirDia(data, dia) {
       const numP = tarea.doble ? 2 : 1; // doble = 2 personas en esa tarea
       const elegidos = [];
       for (let i = 0; i < numP; i++) {
-        const evitar = elegidos.map(e => e.persona);
+        const evitar = [...elegidos.map(e => e.persona), ...conflictosDe(tarea.id)];
         const res = elegirPersona(tarea, evitar, bloqueKey);
         if (!res || !res.persona) break;
         if (elegidos.some(e => e.persona === res.persona)) break; // no repetir persona si no hay suficiente gente
@@ -1179,11 +1203,25 @@ function cuadrarPersonas(sid, did) {
       if (info && info.persona) carga[info.persona] = (carga[info.persona] || 0) + 1;
       if (info && info.personas) info.personas.forEach(p => { if (p.persona) carga[p.persona] = (carga[p.persona] || 0) + 1; });
     }));
+    // Reglas de exclusión (p.ej. quien hace Salón 2 no hace la terraza)
+    const personasEnTareaLocal = (tid) => {
+      const res = [];
+      ['antes', 'despues'].forEach(bk => { const i = a[bk][tid]; if (!i) return; if (i.personas) i.personas.forEach(p => { if (p.persona) res.push(p.persona); }); else if (i.persona) res.push(i.persona); });
+      return res;
+    };
+    const conflictosLocal = (tid) => {
+      const ev = [];
+      EXCLUSIONES.forEach(g => { if (!g.includes(tid)) return; g.forEach(o => { if (o !== tid) personasEnTareaLocal(o).forEach(p => ev.push(p)); }); });
+      return ev;
+    };
     let alguna = false;
     ['antes', 'despues'].forEach(bk => {
       Object.entries(a[bk] || {}).forEach(([tid, info]) => {
         if (!info || info.personas || info.persona) return;
-        const elegido = [...pool].sort((x, y) => {
+        const evitar = conflictosLocal(tid);
+        let cand = pool.filter(p => !evitar.includes(p));
+        if (cand.length === 0) cand = [...pool]; // si no hay suficiente gente, se relaja la regla
+        const elegido = cand.sort((x, y) => {
           const cx = carga[x] || 0, cy = carga[y] || 0;
           if (cx !== cy) return cx - cy;
           const hx = contar(x, tid, histTemp), hy = contar(y, tid, histTemp);
