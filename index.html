@@ -443,8 +443,9 @@ function normalizar(data) {
   if (!Array.isArray(data.personas)) data.personas = [...PERSONAS_INICIALES];
   if (!Array.isArray(data.semanas)) data.semanas = [];
   if (!data.historico || typeof data.historico !== 'object') data.historico = {};
+  // Solo se usan las tareas por defecto en una instalación nueva (sin tareas guardadas).
+  // NO se reañaden las que falten: así se pueden borrar las tareas de fábrica.
   if (!Array.isArray(data.tareas) || data.tareas.length === 0) data.tareas = JSON.parse(JSON.stringify(TAREAS_DEFAULT));
-  else TAREAS_DEFAULT.forEach(def => { if (!data.tareas.find(t => t.id === def.id)) data.tareas.push(JSON.parse(JSON.stringify(def))); });
   data.semanas.forEach((s, i) => {
     if (!s.id) s.id = 'sIdx' + i;
     if (!Array.isArray(s.dias)) s.dias = [];
