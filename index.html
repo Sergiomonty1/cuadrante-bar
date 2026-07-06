@@ -149,6 +149,11 @@
   .tarea-input:hover { border-color: var(--border); }
   .tarea-input:focus { border-color: var(--accent); background: var(--bg-2); outline: none; }
   .add-tarea-row { display: flex; gap: 6px; margin-top: 10px; }
+  .sugerencias { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .sug-label { flex-basis: 100%; font-size: 10px; color: var(--text-4); text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--mono); margin-bottom: 2px; }
+  .sug-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 999px; font-size: 12px; font-family: inherit; cursor: pointer; user-select: none; background: var(--bg-1); border: 1px dashed var(--border-2); color: var(--text-3); }
+  .sug-chip:hover { border-style: solid; border-color: var(--accent); color: var(--accent-2); background: var(--accent-soft); }
+  .sug-chip::before { content: '+'; font-weight: 700; opacity: 0.6; }
 
   .table-wrap { overflow-x: auto; margin: 0 -22px; padding: 0 22px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -297,6 +302,7 @@
           <input type="text" class="tarea-input" id="nuevaTareaAntes" placeholder="Nueva tarea..." />
           <button class="btn btn-ghost btn-icon" onclick="añadirTarea('antes')">+</button>
         </div>
+        <div class="sugerencias" id="sugAntes"></div>
       </div>
       <div>
         <h3>Después del servicio</h3>
@@ -305,6 +311,7 @@
           <input type="text" class="tarea-input" id="nuevaTareaDespues" placeholder="Nueva tarea..." />
           <button class="btn btn-ghost btn-icon" onclick="añadirTarea('despues')">+</button>
         </div>
+        <div class="sugerencias" id="sugDespues"></div>
       </div>
     </div>
   </section>
@@ -393,6 +400,13 @@ const TAREAS_DEFAULT = [
 
 const TAREA_RECARGAR_CAMARAS = { id: 'recargar_camaras', nombre: 'Recargar cámaras', deBarra: true };
 const PREFERENCIA_RESERVAS = ['Miguel', 'Sergio', 'Mireya', 'Alexandru'];
+
+// Sugerencias de tareas típicas de bar: se añaden con un clic.
+// Las que ya estén en la lista no se muestran.
+const SUGERENCIAS = {
+  antes: ['Reponer neveras', 'Reponer hielo', 'Reponer servilletas', 'Encender cafetera', 'Preparar caja', 'Montar terraza', 'Preparar tapas', 'Fregar suelo', 'Reponer papel baños', 'Encender luces y música', 'Sacar pizarra', 'Limpiar cristales entrada', 'Reponer botellero'],
+  despues: ['Fregar suelo', 'Recoger terraza', 'Sacar basura', 'Limpiar cafetera', 'Vaciar lavavajillas', 'Limpiar tiradores cerveza', 'Limpiar cocina y plancha', 'Cuadrar caja', 'Apagar luces y música', 'Limpiar mesas', 'Vaciar neveras', 'Limpiar campana']
+};
 
 // El admin es un usuario real de Firebase Auth; la clave ya no vive en el código
 const ADMIN_EMAIL = 'admin@saboresbar.app';
@@ -580,19 +594,27 @@ function mostrarBadge(id) {
 }
 
 // =============== EDITOR DE TAREAS ===============
+function añadirTareaNombre(bloque, nombre) {
+  if (!modoEditor) return;
+  nombre = (nombre || '').trim();
+  if (!nombre) return;
+  let baseId = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  if (!baseId) baseId = 'tarea_' + Date.now();
+  mutar(data => {
+    // No duplicar si ya existe una tarea con ese nombre
+    if (data.tareas.some(t => t.nombre.toLowerCase() === nombre.toLowerCase())) return false;
+    let id = baseId, n = 1;
+    while (data.tareas.find(t => t.id === id)) { id = baseId + '_' + (n++); }
+    data.tareas.push({ id, nombre, bloque, obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false });
+  });
+}
 function añadirTarea(bloque) {
   if (!modoEditor) return;
   const inp = document.getElementById(bloque === 'antes' ? 'nuevaTareaAntes' : 'nuevaTareaDespues');
   const nombre = inp.value.trim();
   if (!nombre) return;
-  let baseId = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-  if (!baseId) baseId = 'tarea_' + Date.now();
   inp.value = '';
-  mutar(data => {
-    let id = baseId, n = 1;
-    while (data.tareas.find(t => t.id === id)) { id = baseId + '_' + (n++); }
-    data.tareas.push({ id, nombre, bloque, obligatoria: true, prioritaria: false, deBarra: false, doble: false, semanal: false });
-  });
+  añadirTareaNombre(bloque, nombre);
 }
 function eliminarTarea(id) {
   if (!modoEditor) return;
@@ -1402,6 +1424,19 @@ function renderTareasEditor() {
   }).join('');
   document.getElementById('tareasAntesList').innerHTML = renderBloque(tareasAntes());
   document.getElementById('tareasDespuesList').innerHTML = renderBloque(tareasDespues());
+  renderSugerencias('antes');
+  renderSugerencias('despues');
+}
+
+function renderSugerencias(bloque) {
+  const cont = document.getElementById(bloque === 'antes' ? 'sugAntes' : 'sugDespues');
+  if (!cont) return;
+  if (!modoEditor) { cont.innerHTML = ''; return; }
+  const existentes = new Set(tareas.map(t => t.nombre.toLowerCase()));
+  const disponibles = SUGERENCIAS[bloque].filter(n => !existentes.has(n.toLowerCase()));
+  if (disponibles.length === 0) { cont.innerHTML = ''; return; }
+  cont.innerHTML = '<span class="sug-label">Sugerencias · pulsa para añadir</span>' +
+    disponibles.map(n => `<span class="sug-chip" onclick="añadirTareaNombre(${aj(bloque)}, ${aj(n)})">${esc(n)}</span>`).join('');
 }
 
 function renderHistorico() {
@@ -1427,7 +1462,7 @@ Object.assign(window, {
   toggleAdmin, salirAdmin, añadirPersona, eliminarPersona, añadirSemana, eliminarSemana,
   actualizarNombreSemana, añadirDia, eliminarDia, toggleTrabajador, setBarra, generarReparto,
   confirmarDia, desconfirmarDia, copiarDia, resetearHistorico, resetearTodo, añadirTarea,
-  eliminarTarea, moverTarea, toggleFlag, renombrarTarea, abrirModalPersona, cerrarModal,
+  eliminarTarea, añadirTareaNombre, moverTarea, toggleFlag, renombrarTarea, abrirModalPersona, cerrarModal,
   aplicarCambioPersona, quitarPersona, quitarTareaDia, abrirModalAñadirTareaDia, aplicarAñadirTareaDia,
   abrirModalCalendario, cerrarCalendario, calMoverMes, crearSemanaDesdeFecha, crearSemanaSinFecha, cuadrarPersonas
 });
